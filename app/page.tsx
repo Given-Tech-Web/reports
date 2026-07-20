@@ -129,21 +129,25 @@ function ReportsContent() {
 
       } catch (error) {
         console.error("Failed to fetch data:", error);
-        setCarbonData({
-          summary: {
-            total_carbon_saved_kg: 150.5,
-            total_solar_generated_kwh: 315.2,
-            avg_daily_carbon: 21.5,
-            avg_daily_solar: 45.0,
-          },
-          equivalents: {
-            trees_planted: 7,
-            cars_off_road: "0.03",
-            households_powered: "13.68",
-            coal_not_burned: "169.10",
-          },
-        });
-        setChartData(getMockChartData(selectedPeriod));
+
+        setCarbonData(null);
+        setChartData(null);
+        
+        // setCarbonData({
+        //   summary: {
+        //     total_carbon_saved_kg: 150.5,
+        //     total_solar_generated_kwh: 315.2,
+        //     avg_daily_carbon: 21.5,
+        //     avg_daily_solar: 45.0,
+        //   },
+        //   equivalents: {
+        //     trees_planted: 7,
+        //     cars_off_road: "0.03",
+        //     households_powered: "13.68",
+        //     coal_not_burned: "169.10",
+        //   },
+        // });
+        // setChartData(getMockChartData(selectedPeriod));
       } finally {
         setLoading(false);
       }
