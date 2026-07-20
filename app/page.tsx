@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, ChangeEvent } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import DailyEnergyChart from "@/components/reports/DailyEnergyChart";
@@ -8,7 +9,15 @@ import WeeklyTrendChart from "@/components/reports/WeeklyTrendChart";
 import PeriodChart from "@/components/reports/PeriodChart";
 import LogoutButton from "@/components/LogoutButton";
 
-export default function ReportsPage() {
+function ReportsContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [myDevices, setMyDevices] = useState<string[]>([]);
+  
+  const deviceId = searchParams.get('device_id') || myDevices[0] || process.env.NEXT_PUBLIC_DEVICE_ID || "solar_system_001";
+
   const [selectedPeriod, setSelectedPeriod] = useState<"day" | "week" | "month" | "year">("day");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>([]);
@@ -16,7 +25,6 @@ export default function ReportsPage() {
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const deviceId = process.env.NEXT_PUBLIC_DEVICE_ID || "solar_system_001";
 
   // Fetch user info when component mounts
   useEffect(() => {
@@ -26,36 +34,49 @@ export default function ReportsPage() {
         if (response.ok) {
           const user = await response.json();
           setUserRole(user.role);
+
+          if (user.devices && user.devices.length > 0) {
+            setMyDevices(user.devices);
+            
+            // 만약 현재 주소창에 device_id가 없다면, 내 첫 번째 기기로 URL 강제 이동
+            if (!searchParams.get('device_id')) {
+              router.replace(`${pathname}?device_id=${user.devices[0]}`);
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to fetch user info:', error);
       }
     };
     fetchUserInfo();
-  }, []);
+  }, [pathname, router, searchParams]);
+
+  const handleDeviceChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = e.target.value;
+    // URL을 변경하면 기존 작성된 useEffect들이 알아서 새 데이터를 Fetch 해옵니다!
+    router.push(`${pathname}?device_id=${selectedId}`);
+  };
 
   // Fetch available years when component mounts
   useEffect(() => {
     const fetchAvailableYears = async () => {
       try {
+        // 💡 API 호출 시 추출한 deviceId가 자동으로 들어감
         const response = await fetch(`/api/reports/available-years?deviceId=${deviceId}`);
         if (response.ok) {
           const data = await response.json();
           const years = data.years || [];
           if (years.length > 0) {
             setAvailableYears(years);
-            // Set selected year to the most recent year with data
             if (!years.includes(selectedYear)) {
               setSelectedYear(years[0]);
             }
           } else {
-            // Only current year if no data
             const currentYear = new Date().getFullYear();
             setAvailableYears([currentYear]);
             setSelectedYear(currentYear);
           }
         } else {
-          // Fallback to current year only
           const currentYear = new Date().getFullYear();
           setAvailableYears([currentYear]);
           setSelectedYear(currentYear);
@@ -75,25 +96,21 @@ export default function ReportsPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch carbon data
         const carbonResponse = await fetch(
           `/api/reports/carbon?period=${selectedPeriod}&deviceId=${deviceId}`
         );
         const carbonResult = await carbonResponse.json();
         setCarbonData(carbonResult);
 
-        // Fetch chart data based on period
         let chartResponse;
         switch (selectedPeriod) {
           case 'day':
-            // Let the API find the most recent date with data
             chartResponse = await fetch(`/api/reports/daily?deviceId=${deviceId}`);
             break;
           case 'week':
             chartResponse = await fetch(`/api/reports/weekly?deviceId=${deviceId}`);
             break;
           case 'month':
-            // Fetch full year data for monthly view
             chartResponse = await fetch(`/api/reports/monthly?deviceId=${deviceId}&year=${selectedYear}`);
             break;
           case 'year':
@@ -112,8 +129,6 @@ export default function ReportsPage() {
 
       } catch (error) {
         console.error("Failed to fetch data:", error);
-
-        // Use mock carbon data on error (keep existing for fallback)
         setCarbonData({
           summary: {
             total_carbon_saved_kg: 150.5,
@@ -128,8 +143,6 @@ export default function ReportsPage() {
             coal_not_burned: "169.10",
           },
         });
-
-        // Set mock chart data as fallback only
         setChartData(getMockChartData(selectedPeriod));
       } finally {
         setLoading(false);
@@ -165,8 +178,8 @@ export default function ReportsPage() {
           monthly_data: Array.from({ length: 12 }, (_, month) => ({
             month: `${selectedYear}-${String(month + 1).padStart(2, '0')}`,
             month_name: new Date(selectedYear, month).toLocaleDateString('en', { month: 'short' }),
-            total_solar_kwh: 0,  // Set to 0 for mock data
-            carbon_reduction: 0,  // Set to 0 for mock data
+            total_solar_kwh: 0, 
+            carbon_reduction: 0, 
           }))
         };
       case 'year':
@@ -180,41 +193,6 @@ export default function ReportsPage() {
       default:
         return null;
     }
-  };
-
-  // Mock chart data
-  const mockDailyData = {
-    labels: ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"],
-    datasets: [
-      {
-        label: "Solar Generation (kW)",
-        data: [0, 0, 0.5, 3.2, 4.5, 2.1, 0],
-        borderColor: "rgb(251, 191, 36)",
-        backgroundColor: "rgba(251, 191, 36, 0.1)",
-      },
-      {
-        label: "Carbon Saved (kg)",
-        data: [0, 0, 0.24, 1.53, 2.15, 1.00, 0],
-        borderColor: "rgb(34, 197, 94)",
-        backgroundColor: "rgba(34, 197, 94, 0.1)",
-      }
-    ]
-  };
-
-  const mockWeeklyData = {
-    labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    datasets: [
-      {
-        label: "Daily Generation (kWh)",
-        data: [45, 42, 48, 44, 46, 41, 43],
-        backgroundColor: "rgba(251, 191, 36, 0.8)",
-      },
-      {
-        label: "Carbon Saved (kg)",
-        data: [21.5, 20.1, 23.0, 21.1, 22.0, 19.6, 20.6],
-        backgroundColor: "rgba(34, 197, 94, 0.8)",
-      }
-    ]
   };
 
   return (
@@ -239,6 +217,24 @@ export default function ReportsPage() {
               <h1 className="text-2xl font-bold text-gray-900">EMS Dashboard</h1>
             </div>
             <div className="flex-1 flex justify-end items-center gap-4">
+
+              {myDevices.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-600">Device:</span>
+                  <select
+                    value={deviceId}
+                    onChange={handleDeviceChange}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer"
+                  >
+                    {myDevices.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {userRole === 'admin' && (
                 <Link
                   href="/admin"
@@ -257,6 +253,7 @@ export default function ReportsPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
           <p className="text-gray-600 mt-1">Real-time EMS Monitoring and Control System</p>
+          <p className="text-sm font-semibold text-blue-600 mt-1">Target Device: {deviceId}</p>
         </div>
 
         {/* Period Selector */}
@@ -276,7 +273,6 @@ export default function ReportsPage() {
               </button>
             ))}
 
-            {/* Year Selector for Month View */}
             {selectedPeriod === "month" && availableYears.length > 0 && (
               <>
                 <div className="w-px h-8 bg-gray-300 mx-2" />
@@ -302,7 +298,6 @@ export default function ReportsPage() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {/* Total Carbon Saved */}
             <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow-lg p-6">
               <div className="flex items-center mb-2">
                 <svg className="w-8 h-8 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -328,7 +323,6 @@ export default function ReportsPage() {
               )}
             </div>
 
-            {/* Solar Generated */}
             <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg shadow-lg p-6">
               <div className="flex items-center mb-2">
                 <svg className="w-8 h-8 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -345,14 +339,11 @@ export default function ReportsPage() {
                       ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1)
                       : "0"} kWh
                   </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Energy Capacity
-                  </p>
+                  <p className="text-sm text-gray-600 mt-1">Energy Capacity</p>
                 </>
               )}
             </div>
 
-            {/* Trees Equivalent */}
             <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg shadow-lg p-6">
               <div className="flex items-center mb-2">
                 <span className="text-3xl mr-2">🌳</span>
@@ -365,14 +356,11 @@ export default function ReportsPage() {
                   <p className="text-3xl font-bold text-emerald-700">
                     {carbonData?.equivalents?.trees_planted || "0"}
                   </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Equivalent trees
-                  </p>
+                  <p className="text-sm text-gray-600 mt-1">Equivalent trees</p>
                 </>
               )}
             </div>
 
-            {/* Households Powered */}
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-lg p-6">
               <div className="flex items-center mb-2">
                 <span className="text-3xl mr-2">🏠</span>
@@ -385,15 +373,12 @@ export default function ReportsPage() {
                   <p className="text-3xl font-bold text-blue-700">
                     {carbonData?.equivalents?.households_powered || "0"}
                   </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Powering Households
-                  </p>
+                  <p className="text-sm text-gray-600 mt-1">Powering Households</p>
                 </>
               )}
             </div>
           </div>
 
-          {/* Environmental Impact Details */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h3 className="text-lg font-semibold mb-4">Carbon Reduction Effect</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -473,7 +458,6 @@ export default function ReportsPage() {
                         </span>
                       </div>
 
-                      {/* Divider */}
                       <div className="border-t border-gray-200 my-3"></div>
 
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">Daily CO₂ Savings Summary</h4>
@@ -541,7 +525,6 @@ export default function ReportsPage() {
                         </span>
                       </div>
 
-                      {/* Divider */}
                       <div className="border-t border-gray-200 my-3"></div>
 
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">Weekly CO₂ Savings Summary</h4>
@@ -611,7 +594,6 @@ export default function ReportsPage() {
                         </span>
                       </div>
 
-                      {/* Divider */}
                       <div className="border-t border-gray-200 my-3"></div>
 
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">
@@ -649,7 +631,6 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Info Card */}
         <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex">
             <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -667,5 +648,17 @@ export default function ReportsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-xl font-semibold text-gray-600">Loading reports...</div>
+      </div>
+    }>
+      <ReportsContent />
+    </Suspense>
   );
 }
