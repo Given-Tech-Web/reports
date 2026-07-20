@@ -132,7 +132,7 @@ function ReportsContent() {
 
         setCarbonData(null);
         setChartData(null);
-        
+
         // setCarbonData({
         //   summary: {
         //     total_carbon_saved_kg: 150.5,
@@ -425,7 +425,16 @@ function ReportsContent() {
                 </div>
               </div>
             </>
-          ) : (
+          ) : !chartData || !carbonData ? (
+            /* 데이터가 null(권한 없음 또는 에러)일 때 차트 대신 보여줄 화면 */
+            <div className="col-span-1 lg:col-span-2 bg-white rounded-lg shadow-lg p-12 text-center flex flex-col items-center justify-center">
+              <span className="text-4xl mb-4">🔒</span>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">데이터 접근 권한 없음</h3>
+              <p className="text-gray-500">
+                해당 기기({deviceId})의 데이터를 볼 수 있는 권한이 없거나, 데이터를 불러오는데 실패했습니다.
+              </p>
+            </div>
+          ): (
             <>
               {selectedPeriod === "day" && (
                 <>
