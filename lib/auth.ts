@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
+import { db } from '@/lib/database';
 import { cookies } from 'next/headers';
 
 // Validate JWT secret in production
@@ -36,4 +37,12 @@ export async function getSession() {
   if (!token) return null;
 
   return await verifyToken(token.value);
+}
+
+export async function checkDeviceAccess(userId: number, deviceId: string): Promise<boolean> {
+  const authCheck = await db.query<any[]>(
+    `SELECT 1 FROM user_devices WHERE user_id = ? AND device_id = ?`,
+    [userId, deviceId]
+  );
+  return authCheck.length > 0;
 }

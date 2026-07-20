@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSession, checkDeviceAccess } from '@/lib/auth';
 import { db, CARBON_FACTOR, DATA_INTERVAL } from '@/lib/database';
 
 interface YearlyData {
@@ -24,6 +25,21 @@ export async function GET(request: NextRequest) {
   const deviceId = searchParams.get('deviceId') || 'solar_system_001';
 
   try {
+
+    const session = await getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess = await checkDeviceAccess(session.id, deviceId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
+    }
+
     // First try to get data from monthly_inverter_stats (monthly closings)
     let yearlyRows = await db.query<any[]>(
       `SELECT

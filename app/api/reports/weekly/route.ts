@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSession, checkDeviceAccess } from '@/lib/auth';
 import { db, CARBON_FACTOR, DATA_INTERVAL } from '@/lib/database';
 
 export async function GET(request: NextRequest) {
@@ -9,6 +10,20 @@ export async function GET(request: NextRequest) {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 7);
+
+    const session = await getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess = await checkDeviceAccess(session.id, deviceId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
+    }
 
     // First try daily_inverter_stats table for better performance
     let rows = await db.query<any[]>(

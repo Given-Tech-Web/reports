@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSession, checkDeviceAccess } from '@/lib/auth';
 import { db, calculateCarbonEquivalents, CARBON_FACTOR, DATA_INTERVAL, MAX_SOLAR_POWER } from '@/lib/database';
 import { RowDataPacket } from 'mysql2/promise';
 
@@ -30,6 +31,20 @@ export async function GET(request: Request) {
   try {
     let query = '';
     let params: (string | number)[] = [];
+
+    const session = await getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess = await checkDeviceAccess(session.id, deviceId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
+    }
 
     switch (period) {
       case 'day':
