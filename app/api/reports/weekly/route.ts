@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const hasAccess = await checkDeviceAccess(session.id, deviceId);
+    const hasAccess = await checkDeviceAccess(Number(session.id), deviceId);
     if (!hasAccess) {
       return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
     }
