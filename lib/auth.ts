@@ -39,7 +39,7 @@ export async function getSession() {
   return await verifyToken(token.value);
 }
 
-export async function checkDeviceAccess(userId: number, deviceId: string): Promise<boolean> {
+export async function checkDeviceAccess(userId: string, deviceId: string): Promise<boolean> {
   const authCheck = await db.query<any[]>(
     `SELECT 1 FROM user_devices WHERE user_id = ? AND device_id = ?`,
     [userId, deviceId]
