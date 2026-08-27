@@ -210,7 +210,7 @@ function ReportsContent() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                {period === "history" ? "기간 조회" : period.charAt(0).toUpperCase() + period.slice(1)}
+                {period === "history" ? "History" : period.charAt(0).toUpperCase() + period.slice(1)}
               </button>
             ))}
 

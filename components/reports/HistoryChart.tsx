@@ -26,7 +26,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
   }, [deviceId]);
 
-  const fetchData = async (startStr: string, endStr: string) => {
+const fetchData = async (startStr: string, endStr: string) => {
     const start = new Date(startStr);
     const end = new Date(endStr);
     
@@ -42,15 +42,18 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
 
     try {
-      // 💡 Proxy가 아닌 새로 만든 Next.js API를 직접 호출합니다!
       const res = await fetch(`/api/reports/history?deviceId=${deviceId}&start=${startStr}&end=${endStr}`);
       
       if (!res.ok) throw new Error('데이터 로드 실패');
 
       const rawData = await res.json();
       
-      const formattedData = rawData.map((item: any) => ({
-        date: item.date,
+      // 💡 핵심 해결 코드: 데이터가 단일 객체 { ... } 로 오면 강제로 배열 [ { ... } ] 로 감싸줍니다!
+      const dataArray = Array.isArray(rawData) ? rawData : [rawData];
+      
+      // 이제 무조건 배열이므로 .map() 에러가 절대 나지 않습니다.
+      const formattedData = dataArray.map((item: any) => ({
+        date: item.date || item.date_label, // 혹시 date_label로 넘어올 경우를 대비
         solar: Number(item.solar) || 0,
         battery: Number(item.battery) || 0
       }));
@@ -58,7 +61,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
       setChartData(formattedData);
       
     } catch (error) {
-      console.error(error);
+      console.error("차트 에러 상세:", error); // F12 콘솔에서 에러 원인을 정확히 볼 수 있게 변경
       alert('데이터를 가져오지 못했습니다.');
     }
   };
