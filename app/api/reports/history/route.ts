@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, checkDeviceAccess } from '@/lib/auth';
-import { db } from '@/lib/database';
+// 💡 고객님의 코드처럼 상수를 같이 불러옵니다!
+import { db, CARBON_FACTOR, DATA_INTERVAL } from '@/lib/database';
 
-// 🛠️ 도우미 함수: '시간(Hour)' 단위 타임라인 생성
 function generateHourlyTimeline(startStr: string, endStr: string) {
   const timeline = [];
   const start = new Date(`${startStr}T00:00:00`);
@@ -23,37 +23,25 @@ function generateHourlyTimeline(startStr: string, endStr: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. 세션 및 권한 체크 (고객님 프로젝트 규격 적용)
     const session = await getSession();
-    
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
-    }
+    if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
     const deviceId = searchParams.get('deviceId') || 'solar_system_001';
     const start = searchParams.get('start');
     const end = searchParams.get('end');
 
-    if (!start || !end) {
-      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
-    }
+    if (!start || !end) return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
 
     const hasAccess = await checkDeviceAccess(Number(session.id), deviceId);
-    if (!hasAccess) {
-      return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
-    }
+    if (!hasAccess) return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
 
-    // 2. 쿼리용 날짜 세팅 및 타임라인 생성
     const startTime = `${start} 00:00:00`;
     const endTime = `${end} 23:59:59`;
     const timeline = generateHourlyTimeline(start, end);
       
-    // 3. 고객님의 원본 대시보드 SQL 쿼리
-    const query = `
+    // 1. 차트용 데이터 쿼리 (원본 그대로)
+    const chartQuery = `
       WITH RankedData AS (
           SELECT 
               DATE_FORMAT(timestamp, '%Y-%m-%d %H:00') AS date_label,
@@ -72,41 +60,56 @@ export async function GET(request: NextRequest) {
       ORDER BY date_label ASC;
     `;
 
-    // 🌟 4. 고객님의 커스텀 db.query 규격으로 변경 (배열 분해 할당 제거)
-    const rows = await db.query<any[]>(query, [deviceId, startTime, endTime]);
+    const chartRows = await db.query<any[]>(chartQuery, [deviceId, startTime, endTime]);
 
-    // 5. 조회된 데이터를 Map 객체에 담기
     const dataMap = new Map();
-    if (rows && rows.length > 0) {
-      rows.forEach((row) => {
-        dataMap.set(row.date, row);
-      });
+    if (chartRows && chartRows.length > 0) {
+      chartRows.forEach((row) => dataMap.set(row.date, row));
     }
 
-    // 6. 타임라인(24시간)을 순회하며 데이터가 없는 시간대는 0으로 채움
-    const filledData = timeline.map(timeStr => {
-      if (dataMap.has(timeStr)) {
-        return {
-          date: timeStr,
-          solar: Number(dataMap.get(timeStr).solar) || 0,
-          battery: Number(dataMap.get(timeStr).battery) || 0
-        };
-      } else {
-        return {
-          date: timeStr,
-          solar: 0,
-          battery: 0
-        };
+    const filledData = timeline.map(timeStr => ({
+      date: timeStr,
+      solar: Number(dataMap.get(timeStr)?.solar) || 0,
+      battery: Number(dataMap.get(timeStr)?.battery) || 0
+    }));
+
+    // 🌟 2. 고객님이 보여주신 공식을 적용한 Summary(요약) 쿼리 추가 🌟
+    const summaryRows = await db.query<any[]>(
+      `SELECT
+        SUM(pv1_charging_power / 1000 * ?) as total_energy_kwh,
+        SUM(pv1_charging_power / 1000 * ? * ?) as total_carbon_kg
+       FROM raw_inverter_data
+       WHERE device_id = ? AND timestamp BETWEEN ? AND ?`,
+      [DATA_INTERVAL, DATA_INTERVAL, CARBON_FACTOR, deviceId, startTime, endTime]
+    );
+
+    const summaryData = summaryRows && summaryRows.length > 0 ? summaryRows[0] : null;
+    const totalEnergy = parseFloat(summaryData?.total_energy_kwh) || 0;
+    const totalCarbon = parseFloat(summaryData?.total_carbon_kg) || 0;
+
+    const startDateObj = new Date(start);
+    const endDateObj = new Date(end);
+    const diffDays = Math.max(1, Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // 3. 차트 데이터와 정확한 요약 데이터를 함께 리턴
+    return NextResponse.json({
+      chartData: filledData,
+      summary: {
+        total_energy_kwh: totalEnergy,
+        total_carbon_kg: totalCarbon,
+        avg_daily_solar: totalEnergy / diffDays,
+        avg_daily_carbon: totalCarbon / diffDays,
+        
+        // 환경 지표 환산 (기존 대시보드 공식)
+        trees_planted: Math.floor(totalCarbon / 21.5),
+        households_powered: (totalEnergy / 23.04).toFixed(1),
+        cars_off_road: (totalCarbon / 5016).toFixed(3),
+        coal_not_burned: (totalEnergy * 0.536).toFixed(1)
       }
     });
 
-    return NextResponse.json(filledData);
-
   } catch (error: any) {
     console.error('Database error in history report:', error.message);
-    return NextResponse.json(
-      { error: 'Database connection failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Database connection failed' }, { status: 500 });
   }
 }
