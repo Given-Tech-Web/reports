@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
-import pool from '@/lib/db'; 
+import { NextRequest, NextResponse } from 'next/server';
+import { getSession, checkDeviceAccess } from '@/lib/auth';
+import { db } from '@/lib/database';
 
-// 🛠️ 도우미 함수: 조회 기간 전체를 '1시간 단위' 빈 타임라인으로 생성합니다. (1년이든 7일이든 동일)
+// 🛠️ 도우미 함수: '시간(Hour)' 단위 타임라인 생성
 function generateHourlyTimeline(startStr: string, endStr: string) {
   const timeline = [];
   const start = new Date(`${startStr}T00:00:00`);
@@ -20,25 +21,38 @@ function generateHourlyTimeline(startStr: string, endStr: string) {
   return timeline;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // 1. 세션 및 권한 체크 (고객님 프로젝트 규격 적용)
+    const session = await getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const deviceId = searchParams.get('deviceId');
+    const deviceId = searchParams.get('deviceId') || 'solar_system_001';
     const start = searchParams.get('start');
     const end = searchParams.get('end');
 
-    if (!deviceId || !start || !end) {
+    if (!start || !end) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    // 💡 타임존 시차 버그 방지: DB 드라이버가 오해하지 않도록 정확한 문자열로 박아 넣습니다.
+    const hasAccess = await checkDeviceAccess(Number(session.id), deviceId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
+    }
+
+    // 2. 쿼리용 날짜 세팅 및 타임라인 생성
     const startTime = `${start} 00:00:00`;
     const endTime = `${end} 23:59:59`;
-
-    // 1. 기간에 상관없이 시작~종료일까지 1시간 단위 타임라인 생성
     const timeline = generateHourlyTimeline(start, end);
       
-    // 🌟 2. 조건부 렌더링 삭제! 대시보드의 원본 SQL 1개로 통일 🌟
+    // 3. 고객님의 원본 대시보드 SQL 쿼리
     const query = `
       WITH RankedData AS (
           SELECT 
@@ -58,14 +72,18 @@ export async function GET(request: Request) {
       ORDER BY date_label ASC;
     `;
 
-    const [rows] = await pool.query(query, [deviceId, startTime, endTime]);
+    // 🌟 4. 고객님의 커스텀 db.query 규격으로 변경 (배열 분해 할당 제거)
+    const rows = await db.query<any[]>(query, [deviceId, startTime, endTime]);
 
+    // 5. 조회된 데이터를 Map 객체에 담기
     const dataMap = new Map();
-    (rows as any[]).forEach((row) => {
-      dataMap.set(row.date, row);
-    });
+    if (rows && rows.length > 0) {
+      rows.forEach((row) => {
+        dataMap.set(row.date, row);
+      });
+    }
 
-    // 3. DB 데이터와 타임라인을 병합 (빈 시간은 0으로 채움)
+    // 6. 타임라인(24시간)을 순회하며 데이터가 없는 시간대는 0으로 채움
     const filledData = timeline.map(timeStr => {
       if (dataMap.has(timeStr)) {
         return {
@@ -84,8 +102,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(filledData);
 
-  } catch (error) {
-    console.error('History API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Database error in history report:', error.message);
+    return NextResponse.json(
+      { error: 'Database connection failed' },
+      { status: 500 }
+    );
   }
 }
