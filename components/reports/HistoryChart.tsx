@@ -111,7 +111,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
               onClick={() => fetchData(startDate, endDate)}
               className="ml-2 px-4 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
             >
-              조회
+              Search
             </button>
           </div>
         </div>
@@ -143,14 +143,14 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
               <Tooltip 
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} 
                 formatter={(value: number, name: string) => {
-                  if (name === "배터리 용량") return [`${value.toFixed(1)} kWh`, name];
+                  if (name === "Battery Capacity") return [`${value.toFixed(1)} kWh`, name];
                   return [`${value.toFixed(2)} kW`, name];
                 }}
               />
               <Legend verticalAlign="top" height={36} />
               
-              <Line yAxisId="left" type="linear" dataKey="solar" name="태양광 발전" stroke="#F59E0B" strokeWidth={2} activeDot={{ r: 6 }} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} />
-              <Line yAxisId="right" type="linear" dataKey="battery" name="배터리 용량" stroke="#10B981" strokeWidth={2} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#10B981' } : false} />
+              <Line yAxisId="left" type="linear" dataKey="solar" name="Solar Power" stroke="#F59E0B" strokeWidth={2} activeDot={{ r: 6 }} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} />
+              <Line yAxisId="right" type="linear" dataKey="battery" name="Battery Capacity" stroke="#10B981" strokeWidth={2} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#10B981' } : false} />
 
               <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" />
             </LineChart>
