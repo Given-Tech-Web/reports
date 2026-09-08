@@ -16,6 +16,7 @@ function ReportsContent() {
   const searchParams = useSearchParams();
 
   const [myDevices, setMyDevices] = useState<string[]>([]);
+  
   const deviceId = searchParams.get('device_id') || myDevices[0] || process.env.NEXT_PUBLIC_DEVICE_ID || "solar_system_001";
 
   const [selectedPeriod, setSelectedPeriod] = useState<"day" | "week" | "month" | "year" | "history">("day");
@@ -28,8 +29,8 @@ function ReportsContent() {
 
   const [startCapacity, setStartCapacity] = useState<number>(30);
   const [stopCapacity, setStopCapacity] = useState<number>(80);
-  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(true); // 통신 중 Lock 상태
-  const [generatorStatus, setGeneratorStatus] = useState<"running" | "stopped" | "unknown" | "loading">("loading");
+  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(true); 
+  const [generatorStatus, setGeneratorStatus] = useState<"running" | "stopped" | "unknown" | "loading" | "starting" | "stopping">("loading");
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -41,6 +42,7 @@ function ReportsContent() {
 
           if (user.devices && user.devices.length > 0) {
             setMyDevices(user.devices);
+            
             if (!searchParams.get('device_id')) {
               router.replace(`${pathname}?device_id=${user.devices[0]}`);
             }
@@ -85,10 +87,20 @@ function ReportsContent() {
         const res = await fetch(`/api/generator/status?deviceId=${deviceId}`);
         if (res.ok) {
           const data = await res.json();
-          setGeneratorStatus(data.status);
+          const dbStatus = data.status; // 'running', 'stopped', 'unknown'
+
+          setGeneratorStatus((prev) => {
+            if (prev === 'starting' && dbStatus === 'stopped') return 'starting'; 
+            if (prev === 'starting' && dbStatus === 'running') return 'running';  
+            if (prev === 'stopping' && dbStatus === 'running') return 'stopping'; 
+            if (prev === 'stopping' && dbStatus === 'stopped') return 'stopped';  
+            
+            return dbStatus; 
+          });
         }
       } catch (error) {
         console.error("Status fetch error:", error);
+        setGeneratorStatus("unknown");
       }
     };
 
@@ -96,6 +108,7 @@ function ReportsContent() {
     const intervalId = setInterval(fetchStatus, 5000);
     return () => clearInterval(intervalId);
   }, [deviceId]);
+
 
   useEffect(() => {
     const fetchAvailableYears = async () => {
@@ -106,15 +119,24 @@ function ReportsContent() {
           const years = data.years || [];
           if (years.length > 0) {
             setAvailableYears(years);
-            if (!years.includes(selectedYear)) setSelectedYear(years[0]);
+            if (!years.includes(selectedYear)) {
+              setSelectedYear(years[0]);
+            }
           } else {
-            setAvailableYears([new Date().getFullYear()]);
+            const currentYear = new Date().getFullYear();
+            setAvailableYears([currentYear]);
+            setSelectedYear(currentYear);
           }
         } else {
-          setAvailableYears([new Date().getFullYear()]);
+          const currentYear = new Date().getFullYear();
+          setAvailableYears([currentYear]);
+          setSelectedYear(currentYear);
         }
       } catch (error) {
-        setAvailableYears([new Date().getFullYear()]);
+        console.error("Failed to fetch available years:", error);
+        const currentYear = new Date().getFullYear();
+        setAvailableYears([currentYear]);
+        setSelectedYear(currentYear);
       }
     };
     fetchAvailableYears();
@@ -123,6 +145,7 @@ function ReportsContent() {
   useEffect(() => {
     const fetchData = async () => {
       if (selectedPeriod === "history") return;
+
       setLoading(true);
       try {
         const carbonResponse = await fetch(`/api/reports/carbon?period=${selectedPeriod}&deviceId=${deviceId}`);
@@ -139,7 +162,8 @@ function ReportsContent() {
         }
 
         if (chartResponse.ok) {
-          setChartData(await chartResponse.json());
+          const chartResult = await chartResponse.json();
+          setChartData(chartResult);
         } else {
           throw new Error(`Chart API failed: ${chartResponse.status}`);
         }
@@ -151,11 +175,12 @@ function ReportsContent() {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [selectedPeriod, selectedYear, deviceId]);
 
   const handleSaveThresholds = async () => {
-    if (!deviceId) return alert("먼저 기기를 선택해주세요.");
+    if (!deviceId) return alert("Please select a device first.");
     if (startCapacity >= stopCapacity) return alert("Start capacity must be lower than stop capacity!");
 
     setIsConfigLoading(true);
@@ -175,7 +200,7 @@ function ReportsContent() {
   };
 
   const handleManualControl = async (action: 'start' | 'stop') => {
-    if (!deviceId) return alert("먼저 기기를 선택해주세요.");
+    if (!deviceId) return alert("Please select a device first.");
     
     if (action === 'start' && generatorStatus === 'running') return alert('Generator is already running.');
     if (action === 'stop' && generatorStatus === 'stopped') return alert('Generator is already stopped.');
@@ -183,46 +208,68 @@ function ReportsContent() {
     if (!confirm(`Are you sure you want to force ${action.toUpperCase()} the generator?`)) return;
 
     setIsConfigLoading(true);
+    setGeneratorStatus(action === 'start' ? 'starting' : 'stopping');
+
     try {
       const response = await fetch('/api/generator/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId, action }),
       });
-      if (response.ok) alert(`${action.toUpperCase()} command sent.`);
-      else alert('Failed to send command.');
+      
+      if (response.ok) {
+        alert(`${action.toUpperCase()} command sent.\nIt may take up to 1~2 minutes for the engine to respond.`);
+      } else {
+        alert('Failed to send command.');
+        setGeneratorStatus("loading"); 
+      }
     } catch (error) {
       alert('Network error occurred.');
+      setGeneratorStatus("loading"); 
     } finally {
-      setGeneratorStatus(action === 'start' ? 'running' : 'stopped');
-      setTimeout(() => setIsConfigLoading(false), 1000);
+      setIsConfigLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
-        {/* 헤더 부분 기존 코드 유지 */}
         <div className="container mx-auto px-4 py-3">
           <div className="flex justify-between items-center">
             <div className="flex-1"></div>
             <div className="flex items-center gap-4">
-              <Image src="/logo.png" alt="Giventech Logo" width={120} height={32} className="object-contain" style={{ height: '32px', width: 'auto' }} priority unoptimized />
+              <Image
+                src="/logo.png"
+                alt="Giventech Logo"
+                width={120}
+                height={32}
+                className="object-contain"
+                style={{ height: '32px', width: 'auto' }}
+                priority
+                unoptimized
+              />
               <h1 className="text-2xl font-bold text-gray-900">EMS Dashboard</h1>
             </div>
             <div className="flex-1 flex justify-end items-center gap-4">
               {myDevices.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-600">Device:</span>
-                  <select value={deviceId} onChange={handleDeviceChange} className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer">
+                  <select
+                    value={deviceId}
+                    onChange={handleDeviceChange}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer"
+                  >
                     {myDevices.map((id) => (
                       <option key={id} value={id}>{id}</option>
                     ))}
                   </select>
                 </div>
               )}
+
               {userRole === 'admin' && (
-                <Link href="/admin" className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">🛠️ Admin</Link>
+                <Link href="/admin" className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">
+                  🛠️ Admin
+                </Link>
               )}
               <LogoutButton />
             </div>
@@ -231,6 +278,7 @@ function ReportsContent() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
+        
         <div className="mb-6 flex justify-between items-end">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
@@ -240,7 +288,7 @@ function ReportsContent() {
           
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
             <span className="text-sm font-semibold text-gray-600">Generator Status:</span>
-            <div className="flex items-center gap-1.5 w-24 justify-center">
+            <div className="flex items-center gap-1.5 w-28 justify-center">
               {generatorStatus === 'loading' ? (
                 <>
                   <svg className="animate-spin h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24">
@@ -251,9 +299,23 @@ function ReportsContent() {
                 </>
               ) : (
                 <>
-                  <span className={`w-3 h-3 rounded-full ${generatorStatus === 'running' ? 'bg-green-500 animate-pulse' : generatorStatus === 'stopped' ? 'bg-red-500' : 'bg-gray-400'}`}></span>
-                  <span className={`text-sm font-bold ${generatorStatus === 'running' ? 'text-green-600' : generatorStatus === 'stopped' ? 'text-red-600' : 'text-gray-500'}`}>
-                    {generatorStatus === 'running' ? 'RUNNING' : generatorStatus === 'stopped' ? 'STOPPED' : 'OFFLINE'}
+                  <span className={`w-3 h-3 rounded-full 
+                    ${generatorStatus === 'running' ? 'bg-green-500 animate-pulse' : 
+                      generatorStatus === 'stopped' ? 'bg-red-500' : 
+                      (generatorStatus === 'starting' || generatorStatus === 'stopping') ? 'bg-yellow-400 animate-bounce' : 
+                      'bg-gray-400'}`}>
+                  </span>
+                  <span className={`text-sm font-bold 
+                    ${generatorStatus === 'running' ? 'text-green-600' : 
+                      generatorStatus === 'stopped' ? 'text-red-600' : 
+                      generatorStatus === 'starting' ? 'text-yellow-600' : 
+                      generatorStatus === 'stopping' ? 'text-yellow-600' : 
+                      'text-gray-500'}`}>
+                    {generatorStatus === 'running' ? 'RUNNING' : 
+                     generatorStatus === 'stopped' ? 'STOPPED' : 
+                     generatorStatus === 'starting' ? 'STARTING...' : 
+                     generatorStatus === 'stopping' ? 'STOPPING...' : 
+                     'OFFLINE'}
                   </span>
                 </>
               )}
@@ -277,7 +339,6 @@ function ReportsContent() {
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             
-            {/* 1. Auto Control Thresholds */}
             <div className="flex-1 border-b lg:border-b-0 lg:border-r border-gray-100 pb-5 lg:pb-0 lg:pr-6">
               <h3 className="text-base font-semibold text-gray-800 mb-1">Auto Control Thresholds</h3>
               <p className="text-xs text-gray-500 mb-3">Auto start/stop triggers based on battery %</p>
@@ -317,21 +378,20 @@ function ReportsContent() {
               </div>
             </div>
 
-            {/* 2. Manual Control */}
             <div className="flex-1 lg:pl-2">
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Manual Control</h3>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Manual Override</h3>
               <p className="text-xs text-gray-500 mb-3">Force start/stop ignoring auto thresholds</p>
               <div className="flex gap-3">
                 <button 
                   onClick={() => handleManualControl('start')} 
-                  disabled={isConfigLoading || generatorStatus === 'running'} 
+                  disabled={isConfigLoading || generatorStatus === 'running' || generatorStatus === 'starting'} 
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ▶ START
                 </button>
                 <button 
                   onClick={() => handleManualControl('stop')} 
-                  disabled={isConfigLoading || generatorStatus === 'stopped'} 
+                  disabled={isConfigLoading || generatorStatus === 'stopped' || generatorStatus === 'stopping'} 
                   className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ■ STOP
@@ -341,8 +401,7 @@ function ReportsContent() {
             
           </div>
         </div>
-        
-        {/* Period Selector */}
+
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex flex-wrap items-center gap-2">
             {["day", "week", "month", "year", "history"].map((period) => (
@@ -375,7 +434,6 @@ function ReportsContent() {
           </div>
         </div>
 
-        {/* Chart Display */}
         {selectedPeriod === "history" ? (
           <HistoryChart deviceId={deviceId} />
         ) : (
