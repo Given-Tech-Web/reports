@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, checkDeviceAccess } from '@/lib/auth';
-// 💡 고객님의 코드처럼 상수를 같이 불러옵니다!
 import { db, CARBON_FACTOR, DATA_INTERVAL } from '@/lib/database';
 
 function generateHourlyTimeline(startStr: string, endStr: string) {

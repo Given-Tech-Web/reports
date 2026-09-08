@@ -26,6 +26,9 @@ function ReportsContent() {
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [startCapacity, setStartCapacity] = useState<number>(30);
+  const [stopCapacity, setStopCapacity] = useState<number>(80);
+  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -89,35 +92,22 @@ function ReportsContent() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // 💡 [기간 조회] 탭일 때는 이 페이지의 메인 API 조회를 건너뜁니다! (차트 컴포넌트 내부에서 알아서 조회함)
-      if (selectedPeriod === "history") {
-        return;
-      }
+      // 역사 조회 탭일 때는 차트 컴포넌트 내부에서 조회함
+      if (selectedPeriod === "history") return;
 
       setLoading(true);
       try {
-        const carbonResponse = await fetch(
-          `/api/reports/carbon?period=${selectedPeriod}&deviceId=${deviceId}`
-        );
+        const carbonResponse = await fetch(`/api/reports/carbon?period=${selectedPeriod}&deviceId=${deviceId}`);
         const carbonResult = await carbonResponse.json();
         setCarbonData(carbonResult);
 
         let chartResponse;
         switch (selectedPeriod) {
-          case 'day':
-            chartResponse = await fetch(`/api/reports/daily?deviceId=${deviceId}`);
-            break;
-          case 'week':
-            chartResponse = await fetch(`/api/reports/weekly?deviceId=${deviceId}`);
-            break;
-          case 'month':
-            chartResponse = await fetch(`/api/reports/monthly?deviceId=${deviceId}&year=${selectedYear}`);
-            break;
-          case 'year':
-            chartResponse = await fetch(`/api/reports/yearly?deviceId=${deviceId}`);
-            break;
-          default:
-            chartResponse = await fetch(`/api/reports/daily?deviceId=${deviceId}`);
+          case 'day': chartResponse = await fetch(`/api/reports/daily?deviceId=${deviceId}`); break;
+          case 'week': chartResponse = await fetch(`/api/reports/weekly?deviceId=${deviceId}`); break;
+          case 'month': chartResponse = await fetch(`/api/reports/monthly?deviceId=${deviceId}&year=${selectedYear}`); break;
+          case 'year': chartResponse = await fetch(`/api/reports/yearly?deviceId=${deviceId}`); break;
+          default: chartResponse = await fetch(`/api/reports/daily?deviceId=${deviceId}`);
         }
 
         if (chartResponse.ok) {
@@ -126,7 +116,6 @@ function ReportsContent() {
         } else {
           throw new Error(`Chart API failed: ${chartResponse.status}`);
         }
-
       } catch (error) {
         console.error("Failed to fetch data:", error);
         setCarbonData(null);
@@ -138,6 +127,47 @@ function ReportsContent() {
 
     fetchData();
   }, [selectedPeriod, selectedYear, deviceId]);
+
+  const handleSaveThresholds = async () => {
+    if (!deviceId) return alert("먼저 기기를 선택해주세요.");
+    if (startCapacity >= stopCapacity) return alert("시작 임계값(%)은 정지 임계값(%)보다 낮아야 합니다!");
+
+    setIsConfigLoading(true);
+    try {
+      const response = await fetch('/api/generator/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, startCapacity, stopCapacity }),
+      });
+      if (response.ok) alert(`${deviceId} 기기의 자동 가동 임계값이 설정되었습니다!`);
+      else alert('저장에 실패했습니다.');
+    } catch (error) {
+      alert('통신 오류가 발생했습니다.');
+    } finally {
+      setIsConfigLoading(false);
+    }
+  };
+
+  const handleManualControl = async (action: 'start' | 'stop') => {
+    if (!deviceId) return alert("먼저 기기를 선택해주세요.");
+    const actionText = action === 'start' ? '가동(Start)' : '정지(Stop)';
+    if (!confirm(`정말로 발전기를 수동으로 ${actionText} 하시겠습니까?`)) return;
+
+    setIsConfigLoading(true);
+    try {
+      const response = await fetch('/api/generator/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, action }),
+      });
+      if (response.ok) alert(`수동 ${actionText} 명령이 전송되었습니다.`);
+      else alert('명령 전송에 실패했습니다.');
+    } catch (error) {
+      alert('통신 오류가 발생했습니다.');
+    } finally {
+      setIsConfigLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -168,9 +198,7 @@ function ReportsContent() {
                     className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer"
                   >
                     {myDevices.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
+                      <option key={id} value={id}>{id}</option>
                     ))}
                   </select>
                 </div>
@@ -195,6 +223,75 @@ function ReportsContent() {
           <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
           <p className="text-gray-600 mt-1">Real-time EMS Monitoring and Control System</p>
           <p className="text-sm font-semibold text-blue-600 mt-1">Target Device: {deviceId}</p>
+        </div>
+
+        {/* ========================================== */}
+        {/* 💡 [추가됨] 발전기 임계값 및 수동 제어 UI */}
+        {/* ========================================== */}
+        <div className="bg-white rounded-lg shadow-sm p-5 mb-6 border border-gray-200">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            
+            {/* 1. 임계값 설정 영역 */}
+            <div className="flex-1 border-b lg:border-b-0 lg:border-r border-gray-100 pb-5 lg:pb-0 lg:pr-6">
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Auto Control Thresholds</h3>
+              <p className="text-xs text-gray-500 mb-3">배터리 잔량에 따른 발전기 자동 가동/정지 기준</p>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5">
+                  <span className="text-xs text-gray-500 w-10">Start</span>
+                  <input 
+                    type="number" 
+                    value={startCapacity} 
+                    onChange={(e) => setStartCapacity(Number(e.target.value))} 
+                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800" 
+                    min="0" max="100"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+                <span className="text-gray-300">~</span>
+                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5">
+                  <span className="text-xs text-gray-500 w-10">Stop</span>
+                  <input 
+                    type="number" 
+                    value={stopCapacity} 
+                    onChange={(e) => setStopCapacity(Number(e.target.value))} 
+                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800" 
+                    min="0" max="100"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+                <button 
+                  onClick={handleSaveThresholds} 
+                  disabled={isConfigLoading} 
+                  className="ml-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded transition-colors disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            {/* 2. 수동 제어 영역 */}
+            <div className="flex-1 lg:pl-2">
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Manual Override</h3>
+              <p className="text-xs text-gray-500 mb-3">임계값 무시 및 강제 발전기 제어</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleManualControl('start')} 
+                  disabled={isConfigLoading} 
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-50"
+                >
+                  ▶ START
+                </button>
+                <button 
+                  onClick={() => handleManualControl('stop')} 
+                  disabled={isConfigLoading} 
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-50"
+                >
+                  ■ STOP
+                </button>
+              </div>
+            </div>
+            
+          </div>
         </div>
 
         {/* Period Selector */}
