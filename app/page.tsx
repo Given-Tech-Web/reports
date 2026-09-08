@@ -16,7 +16,6 @@ function ReportsContent() {
   const searchParams = useSearchParams();
 
   const [myDevices, setMyDevices] = useState<string[]>([]);
-  
   const deviceId = searchParams.get('device_id') || myDevices[0] || process.env.NEXT_PUBLIC_DEVICE_ID || "solar_system_001";
 
   const [selectedPeriod, setSelectedPeriod] = useState<"day" | "week" | "month" | "year" | "history">("day");
@@ -26,9 +25,11 @@ function ReportsContent() {
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+
   const [startCapacity, setStartCapacity] = useState<number>(30);
   const [stopCapacity, setStopCapacity] = useState<number>(80);
-  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(false);
+  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(true); // 통신 중 Lock 상태
+  const [generatorStatus, setGeneratorStatus] = useState<"running" | "stopped" | "unknown">("unknown");
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -40,7 +41,6 @@ function ReportsContent() {
 
           if (user.devices && user.devices.length > 0) {
             setMyDevices(user.devices);
-            
             if (!searchParams.get('device_id')) {
               router.replace(`${pathname}?device_id=${user.devices[0]}`);
             }
@@ -59,6 +59,45 @@ function ReportsContent() {
   };
 
   useEffect(() => {
+    if (!deviceId) return;
+    const fetchConfig = async () => {
+      setIsConfigLoading(true);
+      try {
+        const res = await fetch(`/api/generator/config?deviceId=${deviceId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setStartCapacity(data.startCapacity);
+          setStopCapacity(data.stopCapacity);
+        }
+      } catch (error) {
+        console.error("Config fetch error:", error);
+      } finally {
+        setIsConfigLoading(false);
+      }
+    };
+    fetchConfig();
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (!deviceId) return;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`/api/generator/status?deviceId=${deviceId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setGeneratorStatus(data.status);
+        }
+      } catch (error) {
+        console.error("Status fetch error:", error);
+      }
+    };
+
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, 5000);
+    return () => clearInterval(intervalId);
+  }, [deviceId]);
+
+  useEffect(() => {
     const fetchAvailableYears = async () => {
       try {
         const response = await fetch(`/api/reports/available-years?deviceId=${deviceId}`);
@@ -67,34 +106,23 @@ function ReportsContent() {
           const years = data.years || [];
           if (years.length > 0) {
             setAvailableYears(years);
-            if (!years.includes(selectedYear)) {
-              setSelectedYear(years[0]);
-            }
+            if (!years.includes(selectedYear)) setSelectedYear(years[0]);
           } else {
-            const currentYear = new Date().getFullYear();
-            setAvailableYears([currentYear]);
-            setSelectedYear(currentYear);
+            setAvailableYears([new Date().getFullYear()]);
           }
         } else {
-          const currentYear = new Date().getFullYear();
-          setAvailableYears([currentYear]);
-          setSelectedYear(currentYear);
+          setAvailableYears([new Date().getFullYear()]);
         }
       } catch (error) {
-        console.error("Failed to fetch available years:", error);
-        const currentYear = new Date().getFullYear();
-        setAvailableYears([currentYear]);
-        setSelectedYear(currentYear);
+        setAvailableYears([new Date().getFullYear()]);
       }
     };
     fetchAvailableYears();
-  }, [deviceId]);
+  }, [deviceId, selectedYear]);
 
   useEffect(() => {
     const fetchData = async () => {
-      // 역사 조회 탭일 때는 차트 컴포넌트 내부에서 조회함
       if (selectedPeriod === "history") return;
-
       setLoading(true);
       try {
         const carbonResponse = await fetch(`/api/reports/carbon?period=${selectedPeriod}&deviceId=${deviceId}`);
@@ -111,8 +139,7 @@ function ReportsContent() {
         }
 
         if (chartResponse.ok) {
-          const chartResult = await chartResponse.json();
-          setChartData(chartResult);
+          setChartData(await chartResponse.json());
         } else {
           throw new Error(`Chart API failed: ${chartResponse.status}`);
         }
@@ -124,13 +151,12 @@ function ReportsContent() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [selectedPeriod, selectedYear, deviceId]);
 
   const handleSaveThresholds = async () => {
     if (!deviceId) return alert("먼저 기기를 선택해주세요.");
-    if (startCapacity >= stopCapacity) return alert("시작 임계값(%)은 정지 임계값(%)보다 낮아야 합니다!");
+    if (startCapacity >= stopCapacity) return alert("Start capacity must be lower than stop capacity!");
 
     setIsConfigLoading(true);
     try {
@@ -139,10 +165,10 @@ function ReportsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId, startCapacity, stopCapacity }),
       });
-      if (response.ok) alert(`${deviceId} 기기의 자동 가동 임계값이 설정되었습니다!`);
-      else alert('저장에 실패했습니다.');
+      if (response.ok) alert(`Settings saved successfully for ${deviceId}`);
+      else alert('Failed to save settings.');
     } catch (error) {
-      alert('통신 오류가 발생했습니다.');
+      alert('Network error occurred.');
     } finally {
       setIsConfigLoading(false);
     }
@@ -150,8 +176,11 @@ function ReportsContent() {
 
   const handleManualControl = async (action: 'start' | 'stop') => {
     if (!deviceId) return alert("먼저 기기를 선택해주세요.");
-    const actionText = action === 'start' ? '가동(Start)' : '정지(Stop)';
-    if (!confirm(`정말로 발전기를 수동으로 ${actionText} 하시겠습니까?`)) return;
+    
+    if (action === 'start' && generatorStatus === 'running') return alert('Generator is already running.');
+    if (action === 'stop' && generatorStatus === 'stopped') return alert('Generator is already stopped.');
+    
+    if (!confirm(`Are you sure you want to force ${action.toUpperCase()} the generator?`)) return;
 
     setIsConfigLoading(true);
     try {
@@ -160,57 +189,40 @@ function ReportsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId, action }),
       });
-      if (response.ok) alert(`수동 ${actionText} 명령이 전송되었습니다.`);
-      else alert('명령 전송에 실패했습니다.');
+      if (response.ok) alert(`${action.toUpperCase()} command sent.`);
+      else alert('Failed to send command.');
     } catch (error) {
-      alert('통신 오류가 발생했습니다.');
+      alert('Network error occurred.');
     } finally {
-      setIsConfigLoading(false);
+      setGeneratorStatus(action === 'start' ? 'running' : 'stopped');
+      setTimeout(() => setIsConfigLoading(false), 1000);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
+        {/* 헤더 부분 기존 코드 유지 */}
         <div className="container mx-auto px-4 py-3">
           <div className="flex justify-between items-center">
             <div className="flex-1"></div>
             <div className="flex items-center gap-4">
-              <Image
-                src="/logo.png"
-                alt="Giventech Logo"
-                width={120}
-                height={32}
-                className="object-contain"
-                style={{ height: '32px', width: 'auto' }}
-                priority
-                unoptimized
-              />
+              <Image src="/logo.png" alt="Giventech Logo" width={120} height={32} className="object-contain" style={{ height: '32px', width: 'auto' }} priority unoptimized />
               <h1 className="text-2xl font-bold text-gray-900">EMS Dashboard</h1>
             </div>
             <div className="flex-1 flex justify-end items-center gap-4">
               {myDevices.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-600">Device:</span>
-                  <select
-                    value={deviceId}
-                    onChange={handleDeviceChange}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer"
-                  >
+                  <select value={deviceId} onChange={handleDeviceChange} className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 cursor-pointer">
                     {myDevices.map((id) => (
                       <option key={id} value={id}>{id}</option>
                     ))}
                   </select>
                 </div>
               )}
-
               {userRole === 'admin' && (
-                <Link
-                  href="/admin"
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                >
-                  🛠️ Admin
-                </Link>
+                <Link href="/admin" className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">🛠️ Admin</Link>
               )}
               <LogoutButton />
             </div>
@@ -219,42 +231,66 @@ function ReportsContent() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
-          <p className="text-gray-600 mt-1">Real-time EMS Monitoring and Control System</p>
-          <p className="text-sm font-semibold text-blue-600 mt-1">Target Device: {deviceId}</p>
+        <div className="mb-6 flex justify-between items-end">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
+            <p className="text-gray-600 mt-1">Real-time EMS Monitoring and Control System</p>
+            <p className="text-sm font-semibold text-blue-600 mt-1">Target Device: {deviceId}</p>
+          </div>
+          
+          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
+            <span className="text-sm font-semibold text-gray-600">Generator Status:</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-3 h-3 rounded-full ${generatorStatus === 'running' ? 'bg-green-500 animate-pulse' : generatorStatus === 'stopped' ? 'bg-red-500' : 'bg-gray-400'}`}></span>
+              <span className={`text-sm font-bold ${generatorStatus === 'running' ? 'text-green-600' : generatorStatus === 'stopped' ? 'text-red-600' : 'text-gray-500'}`}>
+                {generatorStatus === 'running' ? 'RUNNING' : generatorStatus === 'stopped' ? 'STOPPED' : 'OFFLINE'}
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* ========================================== */}
-        {/* 💡 [추가됨] 발전기 임계값 및 수동 제어 UI */}
-        {/* ========================================== */}
-        <div className="bg-white rounded-lg shadow-sm p-5 mb-6 border border-gray-200">
+        <div className="bg-white rounded-lg shadow-sm p-5 mb-6 border border-gray-200 relative">
+          
+          {isConfigLoading && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 rounded-lg flex items-center justify-center">
+              <div className="flex items-center gap-2 text-blue-600 font-medium">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             
-            {/* 1. 임계값 설정 영역 */}
+            {/* 1. Auto Control Thresholds */}
             <div className="flex-1 border-b lg:border-b-0 lg:border-r border-gray-100 pb-5 lg:pb-0 lg:pr-6">
               <h3 className="text-base font-semibold text-gray-800 mb-1">Auto Control Thresholds</h3>
-              <p className="text-xs text-gray-500 mb-3">배터리 잔량에 따른 발전기 자동 가동/정지 기준</p>
+              <p className="text-xs text-gray-500 mb-3">Auto start/stop triggers based on battery %</p>
               <div className="flex items-center gap-3">
-                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5">
+                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5 focus-within:ring-2 focus-within:ring-blue-500">
                   <span className="text-xs text-gray-500 w-10">Start</span>
                   <input 
                     type="number" 
                     value={startCapacity} 
                     onChange={(e) => setStartCapacity(Number(e.target.value))} 
-                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800" 
+                    disabled={isConfigLoading}
+                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800 disabled:opacity-50" 
                     min="0" max="100"
                   />
                   <span className="text-xs text-gray-400">%</span>
                 </div>
                 <span className="text-gray-300">~</span>
-                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5">
+                <div className="flex items-center bg-gray-50 border rounded px-3 py-1.5 focus-within:ring-2 focus-within:ring-blue-500">
                   <span className="text-xs text-gray-500 w-10">Stop</span>
                   <input 
                     type="number" 
                     value={stopCapacity} 
                     onChange={(e) => setStopCapacity(Number(e.target.value))} 
-                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800" 
+                    disabled={isConfigLoading}
+                    className="w-12 bg-transparent outline-none text-sm font-semibold text-gray-800 disabled:opacity-50" 
                     min="0" max="100"
                   />
                   <span className="text-xs text-gray-400">%</span>
@@ -262,29 +298,29 @@ function ReportsContent() {
                 <button 
                   onClick={handleSaveThresholds} 
                   disabled={isConfigLoading} 
-                  className="ml-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded transition-colors disabled:opacity-50"
+                  className="ml-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save
                 </button>
               </div>
             </div>
 
-            {/* 2. 수동 제어 영역 */}
+            {/* 2. Manual Control */}
             <div className="flex-1 lg:pl-2">
-              <h3 className="text-base font-semibold text-gray-800 mb-1">Manual Override</h3>
-              <p className="text-xs text-gray-500 mb-3">임계값 무시 및 강제 발전기 제어</p>
+              <h3 className="text-base font-semibold text-gray-800 mb-1">Manual Control</h3>
+              <p className="text-xs text-gray-500 mb-3">Force start/stop ignoring auto thresholds</p>
               <div className="flex gap-3">
                 <button 
                   onClick={() => handleManualControl('start')} 
-                  disabled={isConfigLoading} 
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-50"
+                  disabled={isConfigLoading || generatorStatus === 'running'} 
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ▶ START
                 </button>
                 <button 
                   onClick={() => handleManualControl('stop')} 
-                  disabled={isConfigLoading} 
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-50"
+                  disabled={isConfigLoading || generatorStatus === 'stopped'} 
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ■ STOP
                 </button>
@@ -293,7 +329,7 @@ function ReportsContent() {
             
           </div>
         </div>
-
+        
         {/* Period Selector */}
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -302,9 +338,7 @@ function ReportsContent() {
                 key={period}
                 onClick={() => setSelectedPeriod(period as any)}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedPeriod === period
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  selectedPeriod === period ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 {period === "history" ? "History" : period.charAt(0).toUpperCase() + period.slice(1)}
@@ -329,11 +363,11 @@ function ReportsContent() {
           </div>
         </div>
 
+        {/* Chart Display */}
         {selectedPeriod === "history" ? (
           <HistoryChart deviceId={deviceId} />
         ) : (
           <>
-            {/* Carbon Savings Section */}
             <div className="mb-8">
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 🌱 {selectedPeriod === "day" ? "Daily" : selectedPeriod === "week" ? "Weekly" : selectedPeriod === "month" ? "Monthly" : "Annual"} Operational Data
@@ -352,14 +386,10 @@ function ReportsContent() {
                   ) : (
                     <>
                       <p className="text-3xl font-bold text-green-700">
-                        {carbonData?.summary?.total_carbon_saved_kg
-                          ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1)
-                          : "0"} kg
+                        {carbonData?.summary?.total_carbon_saved_kg ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1) : "0"} kg
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {selectedPeriod === "day" ? "Today" :
-                         selectedPeriod === "week" ? "Last 7 days" :
-                         selectedPeriod === "month" ? `Year ${selectedYear}` : "This year"}
+                        {selectedPeriod === "day" ? "Today" : selectedPeriod === "week" ? "Last 7 days" : selectedPeriod === "month" ? `Year ${selectedYear}` : "This year"}
                       </p>
                     </>
                   )}
@@ -377,9 +407,7 @@ function ReportsContent() {
                   ) : (
                     <>
                       <p className="text-3xl font-bold text-yellow-700">
-                        {carbonData?.summary?.total_solar_generated_kwh
-                          ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1)
-                          : "0"} kWh
+                        {carbonData?.summary?.total_solar_generated_kwh ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1) : "0"} kWh
                       </p>
                       <p className="text-sm text-gray-600 mt-1">Energy Capacity</p>
                     </>
@@ -481,59 +509,37 @@ function ReportsContent() {
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Total Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.total_solar_generated_kwh
-                                ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1)
-                                : "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.total_solar_generated_kwh ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1) : "0"} kWh</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Carbon Reduction</span>
-                            <span className="font-semibold text-green-600">
-                              {carbonData?.summary?.total_carbon_saved_kg
-                                ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1)
-                                : "0"} kg
-                            </span>
+                            <span className="font-semibold text-green-600">{carbonData?.summary?.total_carbon_saved_kg ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1) : "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Carbon Reduction</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh</span>
                           </div>
-
                           <div className="border-t border-gray-200 my-3"></div>
-
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">Daily CO₂ Savings Summary</h4>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Planting Trees</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.trees_planted || "0"} trees
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.trees_planted || "0"} trees</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Powering Households</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.households_powered || "0"} days
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.households_powered || "0"} days</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Gasoline Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.cars_off_road || "0"} cars/year
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.cars_off_road || "0"} cars/year</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Coal Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.coal_not_burned || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.coal_not_burned || "0"} kg</span>
                           </div>
                         </div>
                       </div>
@@ -548,59 +554,37 @@ function ReportsContent() {
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Total Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.total_solar_generated_kwh
-                                ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1)
-                                : "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.total_solar_generated_kwh ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1) : "0"} kWh</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Carbon Reduction</span>
-                            <span className="font-semibold text-green-600">
-                              {carbonData?.summary?.total_carbon_saved_kg
-                                ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1)
-                                : "0"} kg
-                            </span>
+                            <span className="font-semibold text-green-600">{carbonData?.summary?.total_carbon_saved_kg ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1) : "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Carbon Reduction</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh</span>
                           </div>
-
                           <div className="border-t border-gray-200 my-3"></div>
-
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">Weekly CO₂ Savings Summary</h4>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Planting Trees</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.trees_planted || "0"} trees
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.trees_planted || "0"} trees</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Powering Households</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.households_powered || "0"} days
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.households_powered || "0"} days</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Gasoline Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.cars_off_road || "0"} cars/year
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.cars_off_road || "0"} cars/year</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Coal Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.coal_not_burned || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.coal_not_burned || "0"} kg</span>
                           </div>
                         </div>
                       </div>
@@ -617,61 +601,39 @@ function ReportsContent() {
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Total Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.total_solar_generated_kwh
-                                ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1)
-                                : "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.total_solar_generated_kwh ? parseFloat(carbonData.summary.total_solar_generated_kwh).toFixed(1) : "0"} kWh</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Carbon Reduction</span>
-                            <span className="font-semibold text-green-600">
-                              {carbonData?.summary?.total_carbon_saved_kg
-                                ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1)
-                                : "0"} kg
-                            </span>
+                            <span className="font-semibold text-green-600">{carbonData?.summary?.total_carbon_saved_kg ? parseFloat(carbonData.summary.total_carbon_saved_kg).toFixed(1) : "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Carbon Reduction</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_carbon?.toFixed(1) || "0"} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Avg Solar Energy</span>
-                            <span className="font-semibold">
-                              {carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh
-                            </span>
+                            <span className="font-semibold">{carbonData?.summary?.avg_daily_solar?.toFixed(1) || "0"} kWh</span>
                           </div>
-
                           <div className="border-t border-gray-200 my-3"></div>
-
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">
                             {selectedPeriod === "month" ? "Monthly" : "Annual"} CO₂ Savings Summary
                           </h4>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Planting Trees</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.trees_planted || "0"} trees
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.trees_planted || "0"} trees</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Powering Households</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.households_powered || "0"} days
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.households_powered || "0"} days</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Gasoline Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.cars_off_road || "0"} cars/year
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.cars_off_road || "0"} cars/year</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Reduce Coal Use</span>
-                            <span className="font-semibold">
-                              {carbonData?.equivalents?.coal_not_burned || "0"} kg
-                            </span>
+                            <span className="font-semibold">{carbonData?.equivalents?.coal_not_burned || "0"} kg</span>
                           </div>
                         </div>
                       </div>
