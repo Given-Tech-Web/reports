@@ -29,8 +29,7 @@ function ReportsContent() {
 
   const [startCapacity, setStartCapacity] = useState<number>(30);
   const [stopCapacity, setStopCapacity] = useState<number>(80);
-  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(true); 
-  const [generatorStatus, setGeneratorStatus] = useState<"running" | "stopped" | "unknown" | "loading" | "starting" | "stopping">("loading");
+  const [isConfigLoading, setIsConfigLoading] = useState<boolean>(true); // 통신 중 화면 잠금 상태
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -79,36 +78,6 @@ function ReportsContent() {
     };
     fetchConfig();
   }, [deviceId]);
-
-  useEffect(() => {
-    if (!deviceId) return;
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(`/api/generator/status?deviceId=${deviceId}`);
-        if (res.ok) {
-          const data = await res.json();
-          const dbStatus = data.status; // 'running', 'stopped', 'unknown'
-
-          setGeneratorStatus((prev) => {
-            if (prev === 'starting' && dbStatus === 'stopped') return 'starting'; 
-            if (prev === 'starting' && dbStatus === 'running') return 'running';  
-            if (prev === 'stopping' && dbStatus === 'running') return 'stopping'; 
-            if (prev === 'stopping' && dbStatus === 'stopped') return 'stopped';  
-            
-            return dbStatus; 
-          });
-        }
-      } catch (error) {
-        console.error("Status fetch error:", error);
-        setGeneratorStatus("unknown");
-      }
-    };
-
-    fetchStatus();
-    const intervalId = setInterval(fetchStatus, 5000);
-    return () => clearInterval(intervalId);
-  }, [deviceId]);
-
 
   useEffect(() => {
     const fetchAvailableYears = async () => {
@@ -201,15 +170,9 @@ function ReportsContent() {
 
   const handleManualControl = async (action: 'start' | 'stop') => {
     if (!deviceId) return alert("Please select a device first.");
-    
-    if (action === 'start' && generatorStatus === 'running') return alert('Generator is already running.');
-    if (action === 'stop' && generatorStatus === 'stopped') return alert('Generator is already stopped.');
-    
     if (!confirm(`Are you sure you want to force ${action.toUpperCase()} the generator?`)) return;
 
     setIsConfigLoading(true);
-    setGeneratorStatus(action === 'start' ? 'starting' : 'stopping');
-
     try {
       const response = await fetch('/api/generator/manual', {
         method: 'POST',
@@ -218,14 +181,12 @@ function ReportsContent() {
       });
       
       if (response.ok) {
-        alert(`${action.toUpperCase()} command sent.\nIt may take up to 1~2 minutes for the engine to respond.`);
+        alert(`${action.toUpperCase()} command sent.`);
       } else {
         alert('Failed to send command.');
-        setGeneratorStatus("loading"); 
       }
     } catch (error) {
       alert('Network error occurred.');
-      setGeneratorStatus("loading"); 
     } finally {
       setIsConfigLoading(false);
     }
@@ -284,42 +245,6 @@ function ReportsContent() {
             <h1 className="text-2xl font-bold text-gray-900">System Configuration</h1>
             <p className="text-gray-600 mt-1">Real-time EMS Monitoring and Control System</p>
             <p className="text-sm font-semibold text-blue-600 mt-1">Target Device: {deviceId}</p>
-          </div>
-          
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
-            <span className="text-sm font-semibold text-gray-600">Generator Status:</span>
-            <div className="flex items-center gap-1.5 w-28 justify-center">
-              {generatorStatus === 'loading' ? (
-                <>
-                  <svg className="animate-spin h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span className="text-sm font-bold text-blue-600">CHECKING</span>
-                </>
-              ) : (
-                <>
-                  <span className={`w-3 h-3 rounded-full 
-                    ${generatorStatus === 'running' ? 'bg-green-500 animate-pulse' : 
-                      generatorStatus === 'stopped' ? 'bg-red-500' : 
-                      (generatorStatus === 'starting' || generatorStatus === 'stopping') ? 'bg-yellow-400 animate-bounce' : 
-                      'bg-gray-400'}`}>
-                  </span>
-                  <span className={`text-sm font-bold 
-                    ${generatorStatus === 'running' ? 'text-green-600' : 
-                      generatorStatus === 'stopped' ? 'text-red-600' : 
-                      generatorStatus === 'starting' ? 'text-yellow-600' : 
-                      generatorStatus === 'stopping' ? 'text-yellow-600' : 
-                      'text-gray-500'}`}>
-                    {generatorStatus === 'running' ? 'RUNNING' : 
-                     generatorStatus === 'stopped' ? 'STOPPED' : 
-                     generatorStatus === 'starting' ? 'STARTING...' : 
-                     generatorStatus === 'stopping' ? 'STOPPING...' : 
-                     'OFFLINE'}
-                  </span>
-                </>
-              )}
-            </div>
           </div>
         </div>
 
@@ -384,14 +309,14 @@ function ReportsContent() {
               <div className="flex gap-3">
                 <button 
                   onClick={() => handleManualControl('start')} 
-                  disabled={isConfigLoading || generatorStatus === 'running' || generatorStatus === 'starting'} 
+                  disabled={isConfigLoading} 
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ▶ START
                 </button>
                 <button 
                   onClick={() => handleManualControl('stop')} 
-                  disabled={isConfigLoading || generatorStatus === 'stopped' || generatorStatus === 'stopping'} 
+                  disabled={isConfigLoading} 
                   className="flex-1 bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 rounded shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   ■ STOP
