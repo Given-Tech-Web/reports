@@ -161,7 +161,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <!-- 차트 영역 시작 -->
+      {/* --- 차트 영역 시작 ---*/}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
@@ -302,7 +302,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
               />
               <Legend verticalAlign="top" height={36} />
               
-              <!-- 실제 발전량 (고객님 원래 코드 복구) -->
+              {/* --- 실제 발전량 (고객님 원래 코드 복구) ---*/}
               <Line 
                 yAxisId="left" 
                 type="linear" 
@@ -315,7 +315,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 dot={mergedChartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} 
               />
               
-              <!-- 실제 배터리 (고객님 원래 코드 복구) -->
+              {/* --- 실제 배터리 (고객님 원래 코드 복구) ---*/}
               <Line 
                 yAxisId="right" 
                 type="linear" 
@@ -327,7 +327,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 dot={mergedChartData.length === 1 ? { r: 5, fill: '#10B981' } : false} 
               />
               
-              <!-- 학생 예측 모델 점선 생성기 -->
+              {/* --- 학생 예측 모델 점선 생성기 ---*/}
               {selectedModelIds.map((id, index) => {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
@@ -355,9 +355,9 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </ResponsiveContainer>
         </div>
       </div>
-      <!-- 차트 영역 끝 -->
+      {/* --- 차트 영역 끝 ---*/}
 
-      <!-- 요약(Summary) 영역 시작 (고객님 원래 코드 복구) -->
+      {/* --- 요약(Summary) 영역 시작 (고객님 원래 코드 복구) ---*/}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Custom Period Operations Summary</h3>
         <div className="space-y-3">
@@ -399,7 +399,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         </div>
       </div>
-      <!-- 요약(Summary) 영역 끝 -->
+      {/* --- 요약(Summary) 영역 끝 ---*/}
     </div>
   );
 }
