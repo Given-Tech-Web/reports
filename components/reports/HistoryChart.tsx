@@ -155,17 +155,18 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     );
   };
 
-  // 🌟 고유 학생 이름 목록 추출
-  const uniqueStudents = Array.from(new Set(models.map((m) => m.student_name)));
+// 🌟 고유 키 형식 통일 (이름과 모델명을 명확히 결합)
+  const getModelDataKey = (studentName: string, modelName: string) => {
+    return `\({studentName} -\){modelName}`;
+  };
 
-  // 차트 데이터 병합 (선택된 모델들만 매핑)
   const mergedChartData = chartData.map((actual) => {
     const mergedPoint: any = { ...actual };
 
     selectedModels.forEach((id) => {
       const model = models.find((m) => m.id === id);
       if (model && model.prediction_data) {
-        const predictionKey = `\({model.student_name} (\){model.model_name})`;
+        const predictionKey = getModelDataKey(model.student_name, model.model_name);
         const matchedPred = model.prediction_data.find((p) => p.time === actual.date);
         mergedPoint[predictionKey] = matchedPred ? matchedPred.value : null;
       }
@@ -173,7 +174,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     return mergedPoint;
   });
 
-  const colors = ["#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444", "#3b82f6"];
+  const colors = ["#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444", "#3b82f6", "#06b6d4", "#84cc16"];
 
   return (
     <div className="flex flex-col gap-6">
@@ -356,9 +357,8 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
                 
-                const dataKey = `\({model.student_name} (\){model.model_name})`;
-                const color = colors[index % colors.length]; 
-                
+                const dataKey = getModelDataKey(model.student_name, model.model_name);
+                const color = colors[index % colors.length]; // 인덱스 기반으로 색상 순환 할당
                 return (
                   <Line 
                     key={id}
