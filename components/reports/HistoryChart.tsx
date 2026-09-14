@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush 
 } from 'recharts';
@@ -13,8 +13,10 @@ interface PredictionModel {
 }
 
 export default function HistoryChart({ deviceId }: { deviceId: string }) {
-  const [brushStartIndex, setBrushStartIndex] = useState<number | undefined>(undefined);
-  const [brushEndIndex, setBrushEndIndex] = useState<number | undefined>(undefined);
+  const brushRange = useRef<{ startIndex?: number; endIndex?: number }>({
+    startIndex: undefined,
+    endIndex: undefined
+  });
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
@@ -395,7 +397,15 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
               })}
 
               <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" startIndex={brushStartIndex} endIndex={brushEndIndex}
-              onChange={(range) => { if (range) { setBrushStartIndex(range.startIndex); setBrushEndIndex(range.endIndex); } }} />
+              onChange={(range) => {
+                if (range) {
+                  // 화면을 다시 그리지 않고 인덱스 값만 조용히 기억해둡니다.
+                  brushRange.current = {
+                    startIndex: range.startIndex,
+                    endIndex: range.endIndex
+                  };
+                }
+              }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
