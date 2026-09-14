@@ -380,13 +380,13 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                   <Line 
                     key={id}
                     yAxisId="left" 
-                    type="monotone" 
+                    type="linear" 
                     dataKey={dataKey} 
                     stroke={color} 
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     dot={false}
-                    activeDot={false}
+                    activeDot={{ r: 6 }}
                   />
                 );
               })}
