@@ -375,7 +375,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 if (!model) return null;
                 
                 const dataKey = getModelDataKey(model.student_name, model.model_name);
-                const color = colors[index % colors.length]; // 인덱스 기반으로 색상 순환 할당
+                const color = colors[index % colors.length];
                 return (
                   <Line 
                     key={id}
