@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { db } from '@/lib/database';
 
-// [조회] 기간별 예측 모델 데이터 조회 (GET /api/predictions?start=YYYY-MM-DD&end=YYYY-MM-DD)
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
@@ -19,7 +18,6 @@ export async function GET(request: NextRequest) {
     const startTime = `${start} 00:00:00`;
     const endTime = `${end} 23:59:59`;
 
-    // 선택한 기간(start ~ end)에 해당하는 예측 데이터만 Ranked 쿼리로 최신값만 조회
     const rows = await db.query(
       `WITH RankedPredictions AS (
          SELECT 
@@ -43,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     // 프론트엔드 차트가 그리기 쉽게 학생+모델별로 그룹화
     const grouped = (rows || []).reduce((acc: any, row: any) => {
-      const key = `\({row.student_name}_\){row.model_name}`;
+      const key = `${row.student_name}_${row.model_name}`;
       if (!acc[key]) {
         acc[key] = {
           id: key,
