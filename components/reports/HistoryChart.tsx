@@ -149,6 +149,7 @@ export default function HistoryChart({ deviceId }: HistoryChartProps) {
           <div className="mb-4">
             <label className="block text-sm font-semibold text-gray-700 mb-1">예측 JSON 데이터 배열</label>
             <p className="text-xs text-gray-500 mb-2">형식: <code>{[{"time": "2026-09-14 10:00", "value": 2.5}]}</code></p>
+            <textarea 
               value={newJson} 
               onChange={(e) => setNewJson(e.target.value)} 
               className="w-full px-3 py-2 border rounded font-mono text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none" 
