@@ -1,207 +1,239 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush 
-} from 'recharts';
+import { useState, useEffect } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
-export default function HistoryChart({ deviceId }: { deviceId: string }) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+interface HistoryChartProps {
+  deviceId: string;
+}
+
+interface PredictionModel {
+  id: string;
+  student_name: string;
+  model_name: string;
+  prediction_data: { time: string; value: number }[];
+}
+
+export default function HistoryChart({ deviceId }: HistoryChartProps) {
+  const [actualData, setActualData] = useState<any[]>([]);
+  const [models, setModels] = useState<PredictionModel[]>([]);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   
-  // 1. 차트 데이터를 담을 상태
-  const [chartData, setChartData] = useState<any[]>([]);
-  
-  // 2. 서버에서 계산해준 정확한 요약(Summary) 데이터를 담을 상태
-  const [summary, setSummary] = useState({
-    total_energy_kwh: 0,
-    total_carbon_kg: 0,
-    avg_daily_solar: 0,
-    avg_daily_carbon: 0,
-    trees_planted: 0,
-    households_powered: "0",
-    cars_off_road: "0",
-    coal_not_burned: "0"
-  });
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [newStudent, setNewStudent] = useState("");
+  const [newModel, setNewModel] = useState("");
+  const [newJson, setNewJson] = useState("");
 
-  useEffect(() => {
-    const today = new Date();
-    const start = new Date();
-    start.setDate(today.getDate() - 6);
-    
-    const initialStart = start.toISOString().split('T')[0];
-    const initialEnd = today.toISOString().split('T')[0];
-    
-    setStartDate(initialStart);
-    setEndDate(initialEnd);
-    
-    if (deviceId) {
-      fetchData(initialStart, initialEnd);
-    }
-  }, [deviceId]);
-
-  const fetchData = async (startStr: string, endStr: string) => {
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    
-    if (start > end) {
-      alert('시작 날짜는 종료 날짜보다 이전이어야 합니다.');
-      return;
-    }
-
-    const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays > 366) { 
-      alert('데이터는 한 번에 최대 1년(365일)까지만 조회할 수 있습니다.');
-      return;
-    }
-
+  const fetchActualData = async () => {
     try {
-      // 🌟 백엔드 API 호출
-      const res = await fetch(`/api/reports/history?deviceId=${deviceId}&start=${startStr}&end=${endStr}`);
-      if (!res.ok) throw new Error('데이터 로드 실패');
-
-      const responseData = await res.json();
-      
-      // 🌟 1. API가 보내준 차트 배열 세팅
-      setChartData(responseData.chartData || []);
-      
-      // 🌟 2. API가 계산해서 보내준 정확한 요약 데이터 세팅
-      if (responseData.summary) {
-        setSummary({
-          total_energy_kwh: responseData.summary.total_energy_kwh || 0,
-          total_carbon_kg: responseData.summary.total_carbon_kg || 0,
-          avg_daily_solar: responseData.summary.avg_daily_solar || 0,
-          avg_daily_carbon: responseData.summary.avg_daily_carbon || 0,
-          trees_planted: responseData.summary.trees_planted || 0,
-          households_powered: responseData.summary.households_powered || "0",
-          cars_off_road: responseData.summary.cars_off_road || "0",
-          coal_not_burned: responseData.summary.coal_not_burned || "0"
-        });
+      const res = await fetch("/api/reports/history?deviceId=" + deviceId);
+      if (res.ok) {
+        const data = await res.json();
+        setActualData(data);
       }
-      
     } catch (error) {
-      console.error("차트 에러 상세:", error);
-      alert('데이터를 가져오지 못했습니다.');
+      console.error("Actual data fetch error:", error);
     }
   };
 
+  const fetchModels = async () => {
+    try {
+      const res = await fetch("/api/predictions");
+      if (res.ok) {
+        const data = await res.json();
+        setModels(data);
+      }
+    } catch (error) {
+      console.error("Models fetch error:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchActualData();
+    fetchModels();
+  }, [deviceId]);
+
+  const handleSaveModel = async () => {
+    if (!newStudent || !newModel || !newJson) {
+      return alert("모든 항목을 입력해주세요.");
+    }
+    
+    try {
+      const res = await fetch("/api/predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          studentName: newStudent, 
+          modelName: newModel, 
+          predictionData: newJson 
+        }),
+      });
+      
+      if (res.ok) {
+        alert("예측 데이터가 성공적으로 누적 저장되었습니다!");
+        setNewStudent(""); 
+        setNewModel(""); 
+        setNewJson(""); 
+        setIsFormOpen(false);
+        fetchModels();
+      } else {
+        alert("저장에 실패했습니다. JSON 포맷을 확인해주세요.");
+      }
+    } catch (error) {
+      alert("네트워크 오류가 발생했습니다.");
+    }
+  };
+
+  const toggleModelSelection = (id: string) => {
+    setSelectedModelIds((prev) => 
+      prev.includes(id) ? prev.filter((modelId) => modelId !== id) : [...prev, id]
+    );
+  };
+
+  const mergedChartData = actualData.map((actual) => {
+    const mergedPoint: any = { time: actual.date, Actual_Solar: actual.solar };
+
+    selectedModelIds.forEach((id) => {
+      const model = models.find((m) => m.id === id);
+      if (model) {
+        const predictionKey = model.student_name + " (" + model.model_name + ")";
+        const matchedPred = model.prediction_data.find((p) => p.time === actual.date);
+        mergedPoint[predictionKey] = matchedPred ? matchedPred.value : null;
+      }
+    });
+    return mergedPoint;
+  });
+
+  const colors = ["#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444", "#3b82f6"];
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* --- 차트 영역 시작 --- */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <h2 className="text-xl font-bold text-gray-900">Custom Period History</h2>
-          
-          <div className="flex items-center gap-2 text-sm bg-gray-50 p-2 rounded-lg border border-gray-200">
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)} 
-              className="bg-transparent outline-none cursor-pointer" 
-            />
-            <span className="text-gray-400 font-bold">~</span>
-            <input 
-              type="date" 
-              value={endDate} 
-              max={new Date().toISOString().split('T')[0]} 
-              onChange={(e) => setEndDate(e.target.value)} 
-              className="bg-transparent outline-none cursor-pointer" 
-            />
-            <button 
-              onClick={() => fetchData(startDate, endDate)}
-              className="ml-2 px-4 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
-            >
-              Search
-            </button>
-          </div>
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Actual vs Prediction Models</h2>
+          <p className="text-sm text-gray-500 mt-1">학생들의 시간별 발전량 예측 모델과 실제 발전량 비교</p>
         </div>
-
-        <div className="w-full" style={{ height: '380px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} tickMargin={10} minTickGap={30} />
-              
-              <YAxis 
-                yAxisId="left" 
-                tick={{ fontSize: 11, fill: '#F59E0B' }} 
-                axisLine={false} 
-                tickLine={false} 
-                tickFormatter={(value) => `${Number(value).toFixed(1)} kW`} 
-                domain={[0, (dataMax: number) => Math.max(Number(dataMax) || 0, 1)]} 
-              />
-              <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                tick={{ fontSize: 11, fill: '#10B981' }} 
-                axisLine={false} 
-                tickLine={false}
-                tickFormatter={(value) => `${Number(value).toFixed(1)} kWh`} 
-                domain={[0, (dataMax: number) => Math.max(Number(dataMax) || 0, 10)]} 
-              />
-              
-              <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} 
-                formatter={(value: number, name: string) => {
-                  if (name === "Battery Capacity") return [`${value.toFixed(1)} kWh`, name];
-                  return [`${value.toFixed(2)} kW`, name];
-                }}
-              />
-              <Legend verticalAlign="top" height={36} />
-              
-              <Line yAxisId="left" type="linear" dataKey="solar" name="Solar Power" stroke="#F59E0B" strokeWidth={2} activeDot={{ r: 6 }} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} />
-              <Line yAxisId="right" type="linear" dataKey="battery" name="Battery Capacity" stroke="#10B981" strokeWidth={2} isAnimationActive={false} dot={chartData.length === 1 ? { r: 5, fill: '#10B981' } : false} />
-
-              <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <button 
+          onClick={() => setIsFormOpen(!isFormOpen)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+        >
+          {isFormOpen ? "닫기" : "+ 새 예측 모델 등록"}
+        </button>
       </div>
-      {/* --- 차트 영역 끝 --- */}
 
-      {/* --- 요약(Summary) 영역 시작 --- */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">Custom Period Operations Summary</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Total Solar Energy</span>
-            <span className="font-semibold">{summary.total_energy_kwh.toFixed(1)} kWh</span>
+      {isFormOpen && (
+        <div className="mb-8 p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">학생 이름</label>
+              <input 
+                type="text" 
+                value={newStudent} 
+                onChange={(e) => setNewStudent(e.target.value)} 
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                placeholder="예: 박지희"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">모델명 (알고리즘)</label>
+              <input 
+                type="text" 
+                value={newModel} 
+                onChange={(e) => setNewModel(e.target.value)} 
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                placeholder="예: Random Forest v1"
+              />
+            </div>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Carbon Reduction</span>
-            <span className="font-semibold text-green-600">{summary.total_carbon_kg.toFixed(1)} kg</span>
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-1">예측 JSON 데이터 배열</label>
+            <p className="text-xs text-gray-500 mb-2">형식: [{"time": "2026-09-14 10:00", "value": 2.5}]</p>
+            <textarea 
+              value={newJson} 
+              onChange={(e) => setNewJson(e.target.value)} 
+              className="w-full px-3 py-2 border rounded font-mono text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none" 
+              placeholder="여기에 JSON 데이터를 붙여넣으세요..."
+            />
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Avg Carbon Reduction (Daily)</span>
-            <span className="font-semibold">{summary.avg_daily_carbon.toFixed(1)} kg</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Avg Solar Energy (Daily)</span>
-            <span className="font-semibold">{summary.avg_daily_solar.toFixed(1)} kWh</span>
-          </div>
+          <button 
+            onClick={handleSaveModel} 
+            className="bg-emerald-500 text-white px-6 py-2 rounded font-semibold hover:bg-emerald-600 shadow-sm transition-colors"
+          >
+            데이터 저장하기
+          </button>
+        </div>
+      )}
 
-          <div className="border-t border-gray-200 my-3"></div>
-
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Custom Period CO₂ Savings Summary</h4>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Planting Trees</span>
-            <span className="font-semibold">{summary.trees_planted} trees</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Powering Households</span>
-            <span className="font-semibold">{summary.households_powered} days</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Reduce Gasoline Use</span>
-            <span className="font-semibold">{summary.cars_off_road} cars/year</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Reduce Coal Use</span>
-            <span className="font-semibold">{summary.coal_not_burned} kg</span>
+      {models.length > 0 && (
+        <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+          <h3 className="text-sm font-semibold text-blue-900 mb-3">비교할 예측 모델 선택 (다중 선택 가능):</h3>
+          <div className="flex flex-wrap gap-3">
+            {models.map((model) => {
+              const isChecked = selectedModelIds.includes(model.id);
+              const labelClass = "flex items-center gap-2 px-3 py-2 rounded border cursor-pointer transition-colors " + (isChecked ? "bg-blue-100 border-blue-300" : "bg-white hover:bg-gray-50");
+              
+              return (
+                <label key={model.id} className={labelClass}>
+                  <input 
+                    type="checkbox" 
+                    checked={isChecked}
+                    onChange={() => toggleModelSelection(model.id)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-800">
+                    {model.student_name} <span className="text-gray-500">({model.model_name})</span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
+      )}
+
+      <div className="h-96 w-full mt-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={mergedChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="time" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} />
+            <Tooltip />
+            <Legend wrapperStyle={{ paddingTop: "20px" }} />
+            
+            <Line 
+              type="monotone" 
+              dataKey="Actual_Solar" 
+              name="실제 발전량 (Actual)" 
+              stroke="#22c55e" 
+              strokeWidth={4} 
+              dot={false}
+              activeDot={{ r: 6 }}
+            />
+            
+            {selectedModelIds.map((id, index) => {
+              const model = models.find((m) => m.id === id);
+              if (!model) return null;
+              
+              const dataKey = model.student_name + " (" + model.model_name + ")";
+              const color = colors[index % colors.length]; 
+              
+              return (
+                <Line 
+                  key={id} 
+                  type="monotone" 
+                  dataKey={dataKey} 
+                  stroke={color} 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              );
+            })}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
-      {/* --- 요약(Summary) 영역 끝 --- */}
+      
     </div>
   );
 }
