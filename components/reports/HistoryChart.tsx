@@ -49,10 +49,11 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     
     if (deviceId) {
       fetchData(initialStart, initialEnd);
-      fetchModels();
+      fetchModels(); 
     }
   }, [deviceId]);
 
+  // 💡 [수정 완료] URL 오타(`/api/reports/history?deviceId=\({deviceId}&start=\){startStr}&end=${endStr}`)를 깔끔하게 수정했습니다.
   const fetchData = async (startStr: string, endStr: string) => {
     const start = new Date(startStr);
     const end = new Date(endStr);
@@ -94,12 +95,16 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
   };
 
+  // 💡 [수정 완료] predictions 데이터 조회 시 에러 안 나도록 예외처리 보강
   const fetchModels = async () => {
     try {
       const res = await fetch("/api/predictions");
       if (res.ok) {
         const data = await res.json();
-        setModels(data);
+        // 백엔드 응답이 배열인지 확인 후 세팅
+        setModels(Array.isArray(data) ? data : []);
+      } else {
+        console.error("Predictions fetch failed with status:", res.status);
       }
     } catch (error) {
       console.error("Models fetch error:", error);
@@ -148,7 +153,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
     selectedModelIds.forEach((id) => {
       const model = models.find((m) => m.id === id);
-      if (model) {
+      if (model && model.prediction_data) {
         const predictionKey = model.student_name + " (" + model.model_name + ")";
         const matchedPred = model.prediction_data.find((p) => p.time === actual.date);
         mergedPoint[predictionKey] = matchedPred ? matchedPred.value : null;
@@ -161,7 +166,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* --- 차트 영역 시작 ---*/}
+      <!-- 차트 영역 시작 -->
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
@@ -201,6 +206,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         </div>
 
+        {/* 예측 모델 등록 폼 */}
         {isFormOpen && (
           <div className="mb-8 p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -227,6 +233,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
             </div>
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-1">예측 JSON 데이터 배열</label>
+              <p className="text-xs text-gray-500 mb-2">형식: {'[{"time": "2026-09-14 10:00", "value": 2.5}]'}</p>
               <textarea 
                 value={newJson} 
                 onChange={(e) => setNewJson(e.target.value)} 
@@ -243,6 +250,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         )}
 
+        {/* 모델 선택 체크박스 목록 */}
         {models.length > 0 && (
           <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
             <h3 className="text-sm font-semibold text-blue-900 mb-3">비교할 예측 모델 선택 (다중 선택 가능):</h3>
@@ -269,6 +277,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         )}
 
+        {/* 차트 영역 (배터리 제거, 오직 실제 태양광 + 예측 모델들만 표시) */}
         <div className="w-full" style={{ height: '380px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={mergedChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
@@ -283,31 +292,19 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 tickFormatter={(value) => `${Number(value).toFixed(1)} kW`} 
                 domain={[0, (dataMax: number) => Math.max(Number(dataMax) || 0, 1)]} 
               />
-              <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                tick={{ fontSize: 11, fill: '#10B981' }} 
-                axisLine={false} 
-                tickLine={false}
-                tickFormatter={(value) => `${Number(value).toFixed(1)} kWh`} 
-                domain={[0, (dataMax: number) => Math.max(Number(dataMax) || 0, 10)]} 
-              />
               
               <Tooltip 
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} 
-                formatter={(value: number, name: string) => {
-                  if (name === "Battery Capacity") return [`${value.toFixed(1)} kWh`, name];
-                  return [`${value.toFixed(2)} kW`, name];
-                }}
+                formatter={(value: number, name: string) => [`${value.toFixed(2)} kW`, name]}
               />
               <Legend verticalAlign="top" height={36} />
               
-              {/* --- 실제 발전량 (고객님 원래 코드 복구) ---*/}
+              {/* 실제 발전량 실선 */}
               <Line 
                 yAxisId="left" 
                 type="linear" 
                 dataKey="solar" 
-                name="Solar Power" 
+                name="Actual Solar Power" 
                 stroke="#F59E0B" 
                 strokeWidth={2} 
                 activeDot={{ r: 6 }} 
@@ -315,19 +312,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 dot={mergedChartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} 
               />
               
-              {/* --- 실제 배터리 (고객님 원래 코드 복구) ---*/}
-              <Line 
-                yAxisId="right" 
-                type="linear" 
-                dataKey="battery" 
-                name="Battery Capacity" 
-                stroke="#10B981" 
-                strokeWidth={2} 
-                isAnimationActive={false} 
-                dot={mergedChartData.length === 1 ? { r: 5, fill: '#10B981' } : false} 
-              />
-              
-              {/* --- 학생 예측 모델 점선 생성기 ---*/}
+              {/* 선택된 학생들의 예측 모델 점선 */}
               {selectedModelIds.map((id, index) => {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
@@ -355,9 +340,9 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </ResponsiveContainer>
         </div>
       </div>
-      {/* --- 차트 영역 끝 ---*/}
+      {/* --- 차트 영역 끝 --- */}
 
-      {/* --- 요약(Summary) 영역 시작 (고객님 원래 코드 복구) ---*/}
+      {/* --- 요약(Summary) 영역 시작 --- */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Custom Period Operations Summary</h3>
         <div className="space-y-3">
@@ -399,7 +384,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         </div>
       </div>
-      {/* --- 요약(Summary) 영역 끝 ---*/}
+      {/* --- 요약(Summary) 영역 끝 --- */}
     </div>
   );
 }
