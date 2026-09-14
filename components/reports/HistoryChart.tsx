@@ -13,6 +13,7 @@ interface PredictionModel {
 }
 
 export default function HistoryChart({ deviceId }: { deviceId: string }) {
+  const studentList = ["하영우","박채연","사공진"];
   const brushRange = useRef<{ startIndex?: number; endIndex?: number }>({
     startIndex: undefined,
     endIndex: undefined
@@ -244,13 +245,18 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">이름</label>
-                <input 
-                  type="text" 
+                <select 
                   value={newStudent} 
                   onChange={(e) => setNewStudent(e.target.value)} 
-                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                  placeholder="예: 박지희"
-                />
+                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  <option value="" disabled>학생을 선택하세요</option>
+                  {studentList.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">모델명 (알고리즘)</label>
@@ -389,7 +395,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                     type="linear" 
                     dataKey={dataKey} 
                     stroke={color} 
-                    strokeWidth={2}
+                    strokeWidth={1}
                     dot={false}
                     activeDot={{ r: 6 }}
                   />
