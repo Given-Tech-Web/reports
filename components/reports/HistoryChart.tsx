@@ -53,7 +53,6 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
   }, [deviceId]);
 
-  // 💡 [수정 완료] URL 오타(`/api/reports/history?deviceId=\({deviceId}&start=\){startStr}&end=${endStr}`)를 깔끔하게 수정했습니다.
   const fetchData = async (startStr: string, endStr: string) => {
     const start = new Date(startStr);
     const end = new Date(endStr);
@@ -70,7 +69,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
 
     try {
-      const res = await fetch(`/api/reports/history?deviceId=\({deviceId}&start=\){startStr}&end=${endStr}`);
+      const res = await fetch(`/api/reports/history?deviceId=${deviceId}&start=${startStr}&end=${endStr}`);
       if (!res.ok) throw new Error('데이터 로드 실패');
 
       const responseData = await res.json();
