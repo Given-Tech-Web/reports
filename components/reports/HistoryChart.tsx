@@ -112,7 +112,7 @@ export default function HistoryChart({ deviceId }: HistoryChartProps) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Actual vs Prediction Models</h2>
-          <p className="text-sm text-gray-500 mt-1">학생들의 시간별 발전량 예측 모델과 실제 발전량 비교</p>
+          <p className="text-sm text-gray-500 mt-1">시간별 발전량 예측 모델과 실제 발전량 비교</p>
         </div>
         <button 
           onClick={() => setIsFormOpen(!isFormOpen)}
@@ -126,7 +126,7 @@ export default function HistoryChart({ deviceId }: HistoryChartProps) {
         <div className="mb-8 p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">학생 이름</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">이름</label>
               <input 
                 type="text" 
                 value={newStudent} 
@@ -148,7 +148,7 @@ export default function HistoryChart({ deviceId }: HistoryChartProps) {
           </div>
           <div className="mb-4">
             <label className="block text-sm font-semibold text-gray-700 mb-1">예측 JSON 데이터 배열</label>
-            <p className="text-xs text-gray-500 mb-2">형식: [{"time": "2026-09-14 10:00", "value": 2.5}]</p>
+            <p className="text-xs text-gray-500 mb-2">형식: `[{"time": "2026-09-14 10:00", "value": 2.5}]`</p>
             <textarea 
               value={newJson} 
               onChange={(e) => setNewJson(e.target.value)} 
