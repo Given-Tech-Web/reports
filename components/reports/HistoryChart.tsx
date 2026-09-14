@@ -140,11 +140,10 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
   };
 
-  // 학생(이름) 다중 선택 토글
+  // 다중 선택 토글
   const toggleStudentSelection = (studentName: string) => {
     setSelectedStudents((prev) => {
       const next = prev.includes(studentName) ? prev.filter((s) => s !== studentName) : [...prev, studentName];
-      // 만약 학생 선택이 해제되면, 해당 학생에 속했던 모델 선택도 자동으로 해제
       if (!next.includes(studentName)) {
         const studentModels = models.filter((m) => m.student_name === studentName).map((m) => m.id);
         setSelectedModels((mPrev) => mPrev.filter((id) => !studentModels.includes(id)));
@@ -250,7 +249,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                   onChange={(e) => setNewStudent(e.target.value)} 
                   className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                 >
-                  <option value="" disabled>학생을 선택하세요</option>
+                  <option value="" disabled>선택하세요...</option>
                   {studentList.map((name) => (
                     <option key={name} value={name}>
                       {name}
@@ -381,7 +380,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 dot={mergedChartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} 
               />
               
-              {/* 선택된 학생들의 예측 모델 점선들 */}
+              {/* 선택된 예측 모델 점선들 */}
               {selectedModels.map((id, index) => {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
