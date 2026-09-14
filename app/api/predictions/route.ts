@@ -23,17 +23,17 @@ export async function GET(request: NextRequest) {
         SELECT 
         student_name, 
         model_name, 
-        DATE_FORMAT(created_at, '%Y-%m-%d') as reg_date,
+        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as reg_time,
         DATE_FORMAT(target_time, '%Y-%m-%d %H:%i') as time,
         predicted_value as value,
         ROW_NUMBER() OVER(
-            PARTITION BY student_name, model_name, DATE(created_at), target_time 
+            PARTITION BY student_name, model_name, created_at, target_time 
             ORDER BY created_at DESC
         ) as rn
         FROM solar_predictions
         WHERE target_time BETWEEN ? AND ?
     )
-    SELECT student_name, model_name, reg_date, time, value
+    SELECT student_name, model_name, reg_time, time, value
     FROM RankedPredictions
     WHERE rn = 1
     ORDER BY time ASC`,
@@ -41,14 +41,14 @@ export async function GET(request: NextRequest) {
     );
 
     const grouped = (rows as any[] || []).reduce((acc: any, row: any) => {
-    // 키 값에 등록일(reg_date)을 추가하여 모델을 분리합니다.
-    const key = `\({row.student_name}_\){row.model_name}_${row.reg_date}`;
+    // 키 값에 시분초가 포함된 reg_time을 사용합니다.
+    const key = `\({row.student_name}_\){row.model_name}_${row.reg_time}`;
     if (!acc[key]) {
         acc[key] = {
         id: key,
         student_name: row.student_name,
         model_name: row.model_name,
-        reg_date: row.reg_date, // 프론트에서 표기할 날짜
+        reg_time: row.reg_time, 
         prediction_data: []
         };
     }

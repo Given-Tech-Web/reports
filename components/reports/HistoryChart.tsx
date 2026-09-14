@@ -9,7 +9,7 @@ interface PredictionModel {
   id: string;
   student_name: string;
   model_name: string;
-  reg_date: string;
+  reg_time: string;
   prediction_data: { time: string; value: number }[];
 }
 
@@ -162,8 +162,8 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
 // 🌟 고유 키 형식 통일 (이름과 모델명을 명확히 결합)
   const uniqueStudents = Array.from(new Set(models.map((m) => m.student_name)));
-  const getModelDataKey = (studentName: string, modelName: string, regDate: string) => {
-    return `${studentName}-${modelName}-${regDate}`;
+  const getModelDataKey = (studentName: string, modelName: string, regTime: string) => {
+    return `${studentName}-${modelName}-${regTime}`;
   };
 
   const mergedChartData = chartData.map((actual) => {
@@ -172,7 +172,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     selectedModels.forEach((id) => {
       const model = models.find((m) => m.id === id);
       if (model && model.prediction_data) {
-        const predictionKey = getModelDataKey(model.student_name, model.model_name, model.reg_date);
+        const predictionKey = getModelDataKey(model.student_name, model.model_name, model.reg_time);
         const matchedPred = model.prediction_data.find((p) => p.time === actual.date);
         mergedPoint[predictionKey] = matchedPred ? matchedPred.value : null;
       }
@@ -336,7 +336,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                             id={inputId}
                           />
-                          <span>{model.student_name} - {model.model_name} ({model.reg_date})</span>
+                          <span>{model.student_name} - {model.model_name} ({model.reg_time})</span>
                         </label>
                       );
                     })}
@@ -386,7 +386,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
                 
-                const dataKey = getModelDataKey(model.student_name, model.model_name, model.reg_date);
+                const dataKey = getModelDataKey(model.student_name, model.model_name, model.reg_time);
                 const color = colors[index % colors.length];
                 return (
                   <Line 
