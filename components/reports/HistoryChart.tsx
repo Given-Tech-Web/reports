@@ -166,7 +166,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <!-- 차트 영역 시작 -->
+      {/* --- 차트 영역 시작 --- */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
