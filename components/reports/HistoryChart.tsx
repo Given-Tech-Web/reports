@@ -385,8 +385,8 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                     stroke={color} 
                     strokeWidth={2}
                     strokeDasharray="5 5"
-                    dot={{ r: 4 }}
-                    activeDot={{ r: 6 }}
+                    dot={false}
+                    activeDot={false}
                   />
                 );
               })}
