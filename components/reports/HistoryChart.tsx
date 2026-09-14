@@ -396,7 +396,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 );
               })}
 
-              <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" startIndex={brushStartIndex} endIndex={brushEndIndex}
+              <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC"
               onChange={(range) => {
                 if (range) {
                   // 화면을 다시 그리지 않고 인덱스 값만 조용히 기억해둡니다.
