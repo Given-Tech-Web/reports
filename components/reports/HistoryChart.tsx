@@ -384,7 +384,6 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                     dataKey={dataKey} 
                     stroke={color} 
                     strokeWidth={2}
-                    strokeDasharray="5 5"
                     dot={false}
                     activeDot={{ r: 6 }}
                   />
