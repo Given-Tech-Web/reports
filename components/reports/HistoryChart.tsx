@@ -156,6 +156,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
   };
 
 // 🌟 고유 키 형식 통일 (이름과 모델명을 명확히 결합)
+  const uniqueStudents = Array.from(new Set(models.map((m) => m.student_name)));
   const getModelDataKey = (studentName: string, modelName: string) => {
     return `\({studentName} -\){modelName}`;
   };
