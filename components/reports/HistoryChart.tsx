@@ -73,7 +73,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
     try {
       // 1. 실제 발전량 및 요약 데이터 조회
-      const resHistory = await fetch(`/api/reports/history?deviceId=\({deviceId}&start=\){startStr}&end=${endStr}`);
+      const resHistory = await fetch(`/api/reports/history?deviceId=${deviceId}&start=${startStr}&end=${endStr}`);
       if (!resHistory.ok) throw new Error('실제 데이터 로드 실패');
       const historyData = await resHistory.json();
       
@@ -93,7 +93,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
       }
 
       // 2. 해당 기간의 예측 모델 데이터 조회
-      const resModels = await fetch(`/api/predictions?start=\({startStr}&end=\){endStr}`);
+      const resModels = await fetch(`/api/predictions?start=${startStr}&end=${endStr}`);
       if (resModels.ok) {
         const modelsData = await resModels.json();
         setModels(Array.isArray(modelsData) ? modelsData : []);
