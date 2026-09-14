@@ -29,7 +29,10 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
   });
 
   const [models, setModels] = useState<PredictionModel[]>([]);
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  
+  // 🌟 [요청 반영] 이름별 복수 선택 및 모델별 복수 선택을 위한 State 분리
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [newStudent, setNewStudent] = useState("");
@@ -48,12 +51,12 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     setEndDate(initialEnd);
     
     if (deviceId) {
-      fetchData(initialStart, initialEnd);
-      fetchModels(); 
+      fetchDataAndModels(initialStart, initialEnd);
     }
   }, [deviceId]);
 
-  const fetchData = async (startStr: string, endStr: string) => {
+  // 🌟 [요청 반영] 기간(Start ~ End)이 바뀔 때 실제 데이터와 예측 데이터를 해당 기간에 맞춰 동시 조회
+  const fetchDataAndModels = async (startStr: string, endStr: string) => {
     const start = new Date(startStr);
     const end = new Date(endStr);
     
@@ -69,44 +72,35 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
 
     try {
-      const res = await fetch(`/api/reports/history?deviceId=${deviceId}&start=${startStr}&end=${endStr}`);
-      if (!res.ok) throw new Error('데이터 로드 실패');
-
-      const responseData = await res.json();
+      // 1. 실제 발전량 및 요약 데이터 조회
+      const resHistory = await fetch(`/api/reports/history?deviceId=\({deviceId}&start=\){startStr}&end=${endStr}`);
+      if (!resHistory.ok) throw new Error('실제 데이터 로드 실패');
+      const historyData = await resHistory.json();
       
-      setChartData(responseData.chartData || []);
+      setChartData(historyData.chartData || []);
       
-      if (responseData.summary) {
+      if (historyData.summary) {
         setSummary({
-          total_energy_kwh: responseData.summary.total_energy_kwh || 0,
-          total_carbon_kg: responseData.summary.total_carbon_kg || 0,
-          avg_daily_solar: responseData.summary.avg_daily_solar || 0,
-          avg_daily_carbon: responseData.summary.avg_daily_carbon || 0,
-          trees_planted: responseData.summary.trees_planted || 0,
-          households_powered: responseData.summary.households_powered || "0",
-          cars_off_road: responseData.summary.cars_off_road || "0",
-          coal_not_burned: responseData.summary.coal_not_burned || "0"
+          total_energy_kwh: historyData.summary.total_energy_kwh || 0,
+          total_carbon_kg: historyData.summary.total_carbon_kg || 0,
+          avg_daily_solar: historyData.summary.avg_daily_solar || 0,
+          avg_daily_carbon: historyData.summary.avg_daily_carbon || 0,
+          trees_planted: historyData.summary.trees_planted || 0,
+          households_powered: historyData.summary.households_powered || "0",
+          cars_off_road: historyData.summary.cars_off_road || "0",
+          coal_not_burned: historyData.summary.coal_not_burned || "0"
         });
       }
-    } catch (error) {
-      console.error("차트 에러 상세:", error);
-      alert('데이터를 가져오지 못했습니다.');
-    }
-  };
 
-  // 💡 [수정 완료] predictions 데이터 조회 시 에러 안 나도록 예외처리 보강
-  const fetchModels = async () => {
-    try {
-      const res = await fetch("/api/predictions");
-      if (res.ok) {
-        const data = await res.json();
-        // 백엔드 응답이 배열인지 확인 후 세팅
-        setModels(Array.isArray(data) ? data : []);
-      } else {
-        console.error("Predictions fetch failed with status:", res.status);
+      // 2. 해당 기간의 예측 모델 데이터 조회
+      const resModels = await fetch(`/api/predictions?start=\({startStr}&end=\){endStr}`);
+      if (resModels.ok) {
+        const modelsData = await resModels.json();
+        setModels(Array.isArray(modelsData) ? modelsData : []);
       }
     } catch (error) {
-      console.error("Models fetch error:", error);
+      console.error("데이터 로드 에러:", error);
+      alert('데이터를 가져오지 못했습니다.');
     }
   };
 
@@ -132,7 +126,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
         setNewModel(""); 
         setNewJson(""); 
         setIsFormOpen(false);
-        fetchModels();
+        fetchDataAndModels(startDate, endDate);
       } else {
         alert("저장에 실패했습니다. JSON 포맷을 확인해주세요.");
       }
@@ -141,19 +135,37 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     }
   };
 
-  const toggleModelSelection = (id: string) => {
-    setSelectedModelIds((prev) => 
-      prev.includes(id) ? prev.filter((modelId) => modelId !== id) : [...prev, id]
+  // 학생(이름) 다중 선택 토글
+  const toggleStudentSelection = (studentName: string) => {
+    setSelectedStudents((prev) => {
+      const next = prev.includes(studentName) ? prev.filter((s) => s !== studentName) : [...prev, studentName];
+      // 만약 학생 선택이 해제되면, 해당 학생에 속했던 모델 선택도 자동으로 해제
+      if (!next.includes(studentName)) {
+        const studentModels = models.filter((m) => m.student_name === studentName).map((m) => m.id);
+        setSelectedModels((mPrev) => mPrev.filter((id) => !studentModels.includes(id)));
+      }
+      return next;
+    });
+  };
+
+  // 모델명 다중 선택 토글
+  const toggleModelSelection = (modelId: string) => {
+    setSelectedModels((prev) => 
+      prev.includes(modelId) ? prev.filter((id) => id !== modelId) : [...prev, modelId]
     );
   };
 
+  // 🌟 고유 학생 이름 목록 추출
+  const uniqueStudents = Array.from(new Set(models.map((m) => m.student_name)));
+
+  // 차트 데이터 병합 (선택된 모델들만 매핑)
   const mergedChartData = chartData.map((actual) => {
     const mergedPoint: any = { ...actual };
 
-    selectedModelIds.forEach((id) => {
+    selectedModels.forEach((id) => {
       const model = models.find((m) => m.id === id);
       if (model && model.prediction_data) {
-        const predictionKey = model.student_name + " (" + model.model_name + ")";
+        const predictionKey = `\({model.student_name} (\){model.model_name})`;
         const matchedPred = model.prediction_data.find((p) => p.time === actual.date);
         mergedPoint[predictionKey] = matchedPred ? matchedPred.value : null;
       }
@@ -165,12 +177,11 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* --- 차트 영역 시작 --- */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Custom Period History</h2>
-            <p className="text-sm text-gray-500 mt-1">학생들의 시간별 발전량 예측 모델과 실제 발전량 비교</p>
+            <p className="text-sm text-gray-500 mt-1">실제 태양광 발전량 및 학생별 예측 모델 비교</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
@@ -190,7 +201,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 className="bg-transparent outline-none cursor-pointer" 
               />
               <button 
-                onClick={() => fetchData(startDate, endDate)}
+                onClick={() => fetchDataAndModels(startDate, endDate)}
                 className="ml-2 px-4 py-1.5 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors"
               >
                 Search
@@ -249,34 +260,63 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         )}
 
-        {/* 모델 선택 체크박스 목록 */}
-        {models.length > 0 && (
-          <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-            <h3 className="text-sm font-semibold text-blue-900 mb-3">비교할 예측 모델 선택 (다중 선택 가능):</h3>
-            <div className="flex flex-wrap gap-3">
-              {models.map((model) => {
-                const isChecked = selectedModelIds.includes(model.id);
-                const labelClass = "flex items-center gap-2 px-3 py-2 rounded border cursor-pointer transition-colors " + (isChecked ? "bg-blue-100 border-blue-300" : "bg-white hover:bg-gray-50");
-                
-                return (
-                  <label key={model.id} className={labelClass}>
-                    <input 
-                      type="checkbox" 
-                      checked={isChecked}
-                      onChange={() => toggleModelSelection(model.id)}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm font-medium text-gray-800">
-                      {model.student_name} <span className="text-gray-500">({model.model_name})</span>
-                    </span>
-                  </label>
-                );
-              })}
+        {/* 🌟 [요청 반영] 2단계 필터 UI: 이름별 복수 선택 + 선택된 이름의 하위 모델별 복수 선택 */}
+        {uniqueStudents.length > 0 && (
+          <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">1. 학생(이름) 선택 (다중 선택 가능):</h3>
+              <div className="flex flex-wrap gap-2">
+                {uniqueStudents.map((student) => {
+                  const isStudentChecked = selectedStudents.includes(student);
+                  return (
+                    <button
+                      key={student}
+                      onClick={() => toggleStudentSelection(student)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        isStudentChecked 
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                      }`}
+                    >
+                      {student}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {selectedStudents.length > 0 && (
+              <div className="pt-2 border-t border-blue-200">
+                <h3 className="text-sm font-semibold text-blue-900 mb-2">2. 선택한 학생의 모델 선택 (다중 선택 가능):</h3>
+                <div className="flex flex-wrap gap-2">
+                  {models
+                    .filter((m) => selectedStudents.includes(m.student_name))
+                    .map((model) => {
+                      const isModelChecked = selectedModels.includes(model.id);
+                      return (
+                        <label 
+                          key={model.id} 
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md border cursor-pointer text-sm transition-colors ${
+                            isModelChecked ? 'bg-indigo-100 border-indigo-300 text-indigo-900 font-semibold' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={isModelChecked}
+                            onChange={() => toggleModelSelection(model.id)}
+                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                          />
+                          <span>{model.student_name} - {model.model_name</span>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 차트 영역 (배터리 제거, 오직 실제 태양광 + 예측 모델들만 표시) */}
+        {/* 차트 영역 (배터리 완전 제거, 오직 태양광 + 선택된 예측 모델들만 표시) */}
         <div className="w-full" style={{ height: '380px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={mergedChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
@@ -298,7 +338,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
               />
               <Legend verticalAlign="top" height={36} />
               
-              {/* 실제 발전량 실선 */}
+              {/* 실제 태양광 발전량 실선 */}
               <Line 
                 yAxisId="left" 
                 type="linear" 
@@ -311,12 +351,12 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 dot={mergedChartData.length === 1 ? { r: 5, fill: '#F59E0B' } : false} 
               />
               
-              {/* 선택된 학생들의 예측 모델 점선 */}
-              {selectedModelIds.map((id, index) => {
+              {/* 선택된 학생들의 예측 모델 점선들 */}
+              {selectedModels.map((id, index) => {
                 const model = models.find((m) => m.id === id);
                 if (!model) return null;
                 
-                const dataKey = model.student_name + " (" + model.model_name + ")";
+                const dataKey = `\({model.student_name} (\){model.model_name})`;
                 const color = colors[index % colors.length]; 
                 
                 return (
@@ -339,9 +379,8 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </ResponsiveContainer>
         </div>
       </div>
-      {/* --- 차트 영역 끝 --- */}
 
-      {/* --- 요약(Summary) 영역 시작 --- */}
+      {/* 요약(Summary) 영역 */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Custom Period Operations Summary</h3>
         <div className="space-y-3">
@@ -383,7 +422,6 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           </div>
         </div>
       </div>
-      {/* --- 요약(Summary) 영역 끝 --- */}
     </div>
   );
 }
