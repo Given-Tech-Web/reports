@@ -19,38 +19,41 @@ export async function GET(request: NextRequest) {
     const endTime = `${end} 23:59:59`;
 
     const rows = await db.query(
-      `WITH RankedPredictions AS (
-         SELECT 
-           student_name, 
-           model_name, 
-           DATE_FORMAT(target_time, '%Y-%m-%d %H:%i') as time,
-           predicted_value as value,
-           ROW_NUMBER() OVER(
-             PARTITION BY student_name, model_name, target_time 
-             ORDER BY created_at DESC
-           ) as rn
-         FROM solar_predictions
-         WHERE target_time BETWEEN ? AND ?
-       )
-       SELECT student_name, model_name, time, value
-       FROM RankedPredictions
-       WHERE rn = 1
-       ORDER BY time ASC`,
-      [startTime, endTime]
+    `WITH RankedPredictions AS (
+        SELECT 
+        student_name, 
+        model_name, 
+        DATE_FORMAT(created_at, '%Y-%m-%d') as reg_date,
+        DATE_FORMAT(target_time, '%Y-%m-%d %H:%i') as time,
+        predicted_value as value,
+        ROW_NUMBER() OVER(
+            PARTITION BY student_name, model_name, DATE(created_at), target_time 
+            ORDER BY created_at DESC
+        ) as rn
+        FROM solar_predictions
+        WHERE target_time BETWEEN ? AND ?
+    )
+    SELECT student_name, model_name, reg_date, time, value
+    FROM RankedPredictions
+    WHERE rn = 1
+    ORDER BY time ASC`,
+    [startTime, endTime]
     );
 
     const grouped = (rows as any[] || []).reduce((acc: any, row: any) => {
-      const key = `${row.student_name}_${row.model_name}`;
-      if (!acc[key]) {
+    // 키 값에 등록일(reg_date)을 추가하여 모델을 분리합니다.
+    const key = `\({row.student_name}_\){row.model_name}_${row.reg_date}`;
+    if (!acc[key]) {
         acc[key] = {
-          id: key,
-          student_name: row.student_name,
-          model_name: row.model_name,
-          prediction_data: []
+        id: key,
+        student_name: row.student_name,
+        model_name: row.model_name,
+        reg_date: row.reg_date, // 프론트에서 표기할 날짜
+        prediction_data: []
         };
-      }
-      acc[key].prediction_data.push({ time: row.time, value: row.value });
-      return acc;
+    }
+    acc[key].prediction_data.push({ time: row.time, value: row.value });
+    return acc;
     }, {});
 
     return NextResponse.json(Object.values(grouped));
