@@ -158,7 +158,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 // 🌟 고유 키 형식 통일 (이름과 모델명을 명확히 결합)
   const uniqueStudents = Array.from(new Set(models.map((m) => m.student_name)));
   const getModelDataKey = (studentName: string, modelName: string) => {
-    return `${studentName} -${modelName}`;
+    return `${studentName}-${modelName}`;
   };
 
   const mergedChartData = chartData.map((actual) => {
@@ -175,7 +175,23 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
     return mergedPoint;
   });
 
-  const colors = ["#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444", "#3b82f6", "#06b6d4", "#84cc16"];
+  const colors = [
+    "#8b5cf6", // 보라 (Violet)
+    "#3b82f6", // 파랑 (Blue)
+    "#10b981", // 에메랄드 (Emerald)
+    "#ec4899", // 핑크 (Pink)
+    "#06b6d4", // 청록 (Cyan)
+    "#ef4444", // 레드 (Red)
+    "#84cc16", // 라임 (Lime)
+    "#6366f1", // 인디고 (Indigo)
+    "#14b8a6", // 틸 (Teal)
+    "#d946ef", // 퍼플 (Fuchsia)
+    "#38bdf8", // 스카이 블루 (Sky)
+    "#fb7185", // 로즈 (Rose)
+    "#a855f7", // 퍼플 계열
+    "#eab308", // 골드/노랑 (Yellow)
+    "#10b981"  // 민트 계열
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -345,7 +361,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 yAxisId="left" 
                 type="linear" 
                 dataKey="solar" 
-                name="Actual Solar Power" 
+                name="Solar Power" 
                 stroke="#F59E0B" 
                 strokeWidth={2} 
                 activeDot={{ r: 6 }} 
