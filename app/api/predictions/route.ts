@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
       [startTime, endTime]
     );
 
-    // 프론트엔드 차트가 그리기 쉽게 학생+모델별로 그룹화
     const grouped = (rows as any[] || []).reduce((acc: any, row: any) => {
       const key = `${row.student_name}_${row.model_name}`;
       if (!acc[key]) {
@@ -61,7 +60,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// [저장] 예측 모델 데이터 등록 (POST /api/predictions)
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();

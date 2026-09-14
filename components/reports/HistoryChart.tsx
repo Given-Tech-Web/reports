@@ -13,8 +13,8 @@ interface PredictionModel {
 }
 
 export default function HistoryChart({ deviceId }: { deviceId: string }) {
-  const [brushStartIndex, setBrushStartIndex] = useState(undefined);
-  const [brushEndIndex, setBrushEndIndex] = useState(undefined);
+  const [brushStartIndex, setBrushStartIndex] = useState<number | undefined>(undefined);
+  const [brushEndIndex, setBrushEndIndex] = useState<number | undefined>(undefined);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
