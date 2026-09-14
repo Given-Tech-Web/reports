@@ -13,6 +13,8 @@ interface PredictionModel {
 }
 
 export default function HistoryChart({ deviceId }: { deviceId: string }) {
+  const [brushStartIndex, setBrushStartIndex] = useState(undefined);
+  const [brushEndIndex, setBrushEndIndex] = useState(undefined);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
@@ -392,7 +394,8 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                 );
               })}
 
-              <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" />
+              <Brush dataKey="date" height={30} stroke="#CBD5E1" fill="#F8FAFC" startIndex={brushStartIndex} endIndex={brushEndIndex}
+              onChange={(range) => { if (range) { setBrushStartIndex(range.startIndex); setBrushEndIndex(range.endIndex); } }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
