@@ -13,7 +13,7 @@ interface PredictionModel {
 }
 
 export default function HistoryChart({ deviceId }: { deviceId: string }) {
-  const studentList = ["하영우","박채연","사공진"];
+  const studentList = ["H","P","SG"];
   const brushRange = useRef<{ startIndex?: number; endIndex?: number }>({
     startIndex: undefined,
     endIndex: undefined
