@@ -181,7 +181,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Custom Period History</h2>
-            <p className="text-sm text-gray-500 mt-1">실제 태양광 발전량 및 학생별 예측 모델 비교</p>
+            <p className="text-sm text-gray-500 mt-1">실제 태양광 발전량 및 예측 모델 비교</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
@@ -221,7 +221,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
           <div className="mb-8 p-5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">학생 이름</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">이름</label>
                 <input 
                   type="text" 
                   value={newStudent} 
@@ -264,7 +264,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
         {uniqueStudents.length > 0 && (
           <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex flex-col gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-blue-900 mb-2">1. 학생(이름) 선택 (다중 선택 가능):</h3>
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">1. 이름 선택 (다중 선택 가능):</h3>
               <div className="flex flex-wrap gap-2">
                 {uniqueStudents.map((student) => {
                   const isStudentChecked = selectedStudents.includes(student);
@@ -287,7 +287,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
 
             {selectedStudents.length > 0 && (
               <div className="pt-2 border-t border-blue-200">
-                <h3 className="text-sm font-semibold text-blue-900 mb-2">2. 선택한 학생의 모델 선택 (다중 선택 가능):</h3>
+                <h3 className="text-sm font-semibold text-blue-900 mb-2">2. 모델 선택 (다중 선택 가능):</h3>
                 <div className="flex flex-wrap gap-2">
                   {models
                     .filter((m) => selectedStudents.includes(m.student_name))
@@ -306,7 +306,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                             onChange={() => toggleModelSelection(model.id)}
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                           />
-                          <span>{model.student_name} - {model.model_name</span>
+                          <span>{model.student_name} - {model.model_name}</span>
                         </label>
                       );
                     })}
