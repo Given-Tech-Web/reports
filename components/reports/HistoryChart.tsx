@@ -203,7 +203,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Custom Period History</h2>
-            <p className="text-sm text-gray-500 mt-1">실제 태양광 발전량 및 예측 모델 비교</p>
+            <p className="text-sm text-gray-500 mt-1">실제 태양광 발전량 및 예측 모델 비교 (임시 기능)</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
