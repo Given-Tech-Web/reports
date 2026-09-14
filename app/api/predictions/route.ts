@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     );
 
     // 프론트엔드 차트가 그리기 쉽게 학생+모델별로 그룹화
-    const grouped = (rows || []).reduce((acc: any, row: any) => {
+    const grouped = (rows as any[] || []).reduce((acc: any, row: any) => {
       const key = `${row.student_name}_${row.model_name}`;
       if (!acc[key]) {
         acc[key] = {
