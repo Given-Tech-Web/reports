@@ -311,9 +311,10 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                     .filter((m) => selectedStudents.includes(m.student_name))
                     .map((model) => {
                       const isModelChecked = selectedModels.includes(model.id);
+                      const inputId = `model-checkbox-${model.id}`;
                       return (
                         <label 
-                          key={model.id} 
+                          key={model.id} htmlFor={inputId}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-md border cursor-pointer text-sm transition-colors ${
                             isModelChecked ? 'bg-indigo-100 border-indigo-300 text-indigo-900 font-semibold' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                           }`}
@@ -323,6 +324,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                             checked={isModelChecked}
                             onChange={() => toggleModelSelection(model.id)}
                             className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                            id={inputId}
                           />
                           <span>{model.student_name} - {model.model_name}</span>
                         </label>
