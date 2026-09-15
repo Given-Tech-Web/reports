@@ -397,6 +397,7 @@ export default function HistoryChart({ deviceId }: { deviceId: string }) {
                     stroke={color} 
                     strokeWidth={1}
                     dot={false}
+                    isAnimationActive={false}
                     activeDot={{ r: 6 }}
                   />
                 );
